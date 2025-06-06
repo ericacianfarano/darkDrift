@@ -1,21 +1,41 @@
 from track2p.t2p import run_t2p
 from track2p.ops.default import DefaultTrackOps
+import os
 
 if __name__ == '__main__':
 
-    animal = 'EC_GCaMP6s_09'
+    animal = 'EC_dark_05'
+    root_dir = f'I:\dark_drift\data\{animal}'
+    files = []
+
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        if os.path.basename(dirpath) == 'experiments':
+            files.append(dirpath)
+
+
+    # animal = 'EC_GCaMP6s_09'
+    #
+    # # subfiles
+    # if animal == 'EC_GCaMP6s_06':
+    #     last_digits = [0,0,0,0,1,0]
+    # elif animal == 'EC_GCaMP6s_09':
+    #     last_digits = [1,1,0,0,2,0,0]
 
     # Get default parameters
     track_ops = DefaultTrackOps()
 
     # for now parameters are defined manually:
-    track_ops.all_ds_path = [                           # list of paths to datasets containing a `suite2p` folder
-                fr'I:\dark_drift_trial\data\{animal}\20250213\big100_ori\big100_ori_000_001\experiments',
-                fr'I:\dark_drift_trial\data\{animal}\20250221\big100_ori\big100_ori_000_001\experiments',
-                fr'I:\dark_drift_trial\data\{animal}\20250303\big100_ori\big100_ori_000_000\experiments',
-                fr'I:\dark_drift_trial\data\{animal}\20250311\big100_ori\big100_ori_000_000\experiments'
-            ]
+    # track_ops.all_ds_path = [                           # list of paths to datasets containing a `suite2p` folder
+    #             fr'I:\dark_drift_trial\data\{animal}\20250213\big100_ori\big100_ori_000_00{last_digits[0]}\experiments',
+    #             #fr'I:\dark_drift_trial\data\{animal}\20250221\big100_ori\big100_ori_000_00{last_digits[1]}\experiments',
+    #             #fr'I:\dark_drift_trial\data\{animal}\20250303\big100_ori\big100_ori_000_00{last_digits[2]}\experiments',
+    #             #fr'I:\dark_drift_trial\data\{animal}\20250311\big100_ori\big100_ori_000_00{last_digits[3]}\experiments',
+    #             fr'I:\dark_drift_trial\data\{animal}\20250319\big100_ori\big100_ori_000_00{last_digits[4]}\experiments',
+    #             fr'I:\dark_drift_trial\data\{animal}\20250425\big100_ori\big100_ori_000_00{last_digits[5]}\experiments',
+    #             fr'I:\dark_drift_trial\data\{animal}\20250523\big100_ori\big100_ori_000_00{last_digits[6]}\experiments'
+    #         ]
 
+    track_ops.all_ds_path = files
     # # # for now parameters are defined manually:
     # track_ops.all_ds_path = [                           # list of paths to datasets containing a `suite2p` folder
     #             r'E:\DriftScape\Data\EC_GECO_09\20231106\r2\r2_205_000\experiments',
@@ -25,10 +45,10 @@ if __name__ == '__main__':
     #         ]
 
     #track_ops.save_path = r'E:\DriftScape\Data\EC_GECO_09\test' # path where to save the outputs of algorithm (a 'track2p' folder will be created where figures for visualisation and matrices of matches would be saved)
-    track_ops.save_path = fr'I:\dark_drift_trial\data\{animal}'  # path where to save the outputs of algorithm (a 'track2p' folder will be created where figures for visualisation and matrices of matches would be saved)
+    track_ops.save_path = fr'I:\dark_drift\data\{animal}'  # path where to save the outputs of algorithm (a 'track2p' folder will be created where figures for visualisation and matrices of matches would be saved)
 
     track_ops.reg_chan = 0 # channel to use for registration (0=functional, 1=anatomical) (use 0 if only recording gcamp!)
-    track_ops.iscell_thr = 0.1 # set this to 0 (basically take all cells)
+    track_ops.iscell_thr = 0.2 # set this to 0 (basically take all cells)
 
     # #print(track_ops)
     # #print(track_ops.save_path)

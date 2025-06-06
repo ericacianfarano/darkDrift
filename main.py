@@ -2,12 +2,13 @@ from helpers import *
 from preprocessing import *
 from track2p_preprocessing import *
 from suite2p_preprocessing import *
+from figures import *
 
 #do everything with non deconvolved data (f-0.7*fneu)
 
-animal = 'EC_GCaMP6s_06'
+animal = 'EC_GCaMP6s_09'
 path = r'I:\dark_drift_trial\data'
-track2p_folder = 'track2p'
+track2p_folder = 'track2p - 10 weeks'
 suite2p_obj = suite2pPreprocessing(animal, path, track2p_folder, ntheta = 8, fps = 20, deconvolved = True)
 
 # figures for proposal
@@ -15,13 +16,21 @@ fov_across_days(suite2p_obj, brightness = 0.5, contrast = 2.2)
 hist_osi_angle (suite2p_obj)        # use deconvolved
 plot_response(suite2p_obj, cell_i = 5) # use fluorescence traces
 rasters_across_days(suite2p_obj)
-plot_rois_across_days (suite2p_obj, suite2p_obj.track2p_obj, 65, n_cells_to_plot = 2, brightness = 0.5, contrast = 1)
 polar_plots_across_days_rois(suite2p_obj, cells_to_plot = [10,21,75,103])
 polar_plots_across_days(suite2p_obj, cell = 5)
+plot_rois_across_days (suite2p_obj, suite2p_obj.track2p_obj, 65, n_cells_to_plot = 2, brightness = 0.5, contrast = 1) # just keep reruning this if it doesn't plot
+
 
 plot_raw_responses (suite2p_obj, animal)
 plot_response(suite2p_obj, cell_i = 5)
 
+# to upload
+# >> git status
+# >> git add . (stage all updated files)
+# >> git add filename.py (stage a specific file)
+# >> git commit -m "Describe your change here"
+# git push
+# to stage and commit all in one line: git commit -am "Quick update"
 
 
 plot_corr(suite2p_obj,n = 1000, across_days = True)

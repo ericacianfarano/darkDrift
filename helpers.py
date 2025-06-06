@@ -366,10 +366,13 @@ def complex_phase_from_tuning (tuning_curves, thetas):
     # the argument (angle / preferred angle) of the complex number encodes the preferred orientation (the orientation to which the neuron responds most strongly).
     pref_orientation = np.rad2deg(np.angle(complex_ori))/2  # preferred angle
     # divide by 2 because of the i*theta*2 in the original equation
+    pref_orientation = np.nan_to_num(pref_orientation, nan=0)  # if the pref_orientation is nan, put it to 0
 
     complex_direction = (responses_theta * np.exp(1j * theta_rad)).sum(axis=-1) / (responses_theta.sum(axis=-1))
     dsi = np.abs(complex_direction)  # ranges between 0 and 1, where 0 = no direction selectivity, 1 = perfect direction selectivity.
     pref_direction = np.rad2deg(np.angle(complex_direction))  # neuron’s preferred direction.
+    dsi = np.nan_to_num(dsi, nan=0)  # if the pref_orientation is nan, put it to 0
+    pref_direction = np.nan_to_num(pref_direction, nan=0)  # if the pref_orientation is nan, put it to 0
 
     return (complex_ori, osi, pref_orientation), (complex_direction, dsi, pref_direction)
 
@@ -394,9 +397,14 @@ def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
     :param obj:
     :param null_distribution:
     :param n:
-    :param across_days: True if we want to get 1 correlation value across all days(average the matrix)
+    :param across_days: True if we want to get 1 correlation value across all days(average the matrix). False if we want to compare separate days
     :return:
+
+    NB: deconvolved must be true
     '''
+
+     # if using deconvolved traces, z scoring doesnt make sense (cant have neg values). only use z score if deconvovled = false
+    param_matrix_key = 'param_matrix_whole' if obj.deconvolved else 'param_matrix_whole_zscore'
 
     if across_days:     # 1 correlation value per cell
         corr_values = np.zeros(obj.track2p_obj.track_ops_dict['n_tracked'])
@@ -408,37 +416,72 @@ def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
         for i, day_i in enumerate(obj.days):
             for j, day_j in enumerate(obj.days):
 
-                if null_distribution:
-                    # param_matrix_whole_zscore is : shape (n_repeats, n_orientations, n_cells, n_timepoints)
-                    # response vector i > (shape n_orientations) > average response across time
-                    vector_i = obj.dat_subject[day_i]['param_matrix_whole_zscore'].mean(axis=(0,-1))[:, cell]
+                if i != j: # if we are comparing two different days
+                    if null_distribution:
+                        # param_matrix_whole_zscore is : shape (n_repeats, n_orientations, n_cells, n_timepoints)
+                        # response vector i > (shape n_orientations) > average response across time
+                        vector_i = obj.dat_subject[day_i][param_matrix_key].mean(axis=(0,-1))[:, cell]
 
-                    null_dist = np.zeros(n)
-                    # for the null distribution: shuffle cells across days (or just pick random cells)
-                    for i_n in range(n):
-                        # output of interleave_responses is : shape (n_orientations, n_cells, n_timepoints)
-                        # response vector j > (shape n_orientations) > average response across time
-                        vector_j = obj.dat_subject[day_i]['param_matrix_whole_zscore'].mean(axis=(0,-1))[:, np.random.randint(obj.track2p_obj.track_ops_dict['n_tracked'])]
+                        null_dist = np.zeros(n)
+                        # for the null distribution: shuffle cells across days (or just pick random cells)
+                        for i_n in range(n):
+                            # output of interleave_responses is : shape (n_orientations, n_cells, n_timepoints)
+                            # response vector j > (shape n_orientations) > average response across time
+                            vector_j = obj.dat_subject[day_i][param_matrix_key].mean(axis=(0,-1))[:, np.random.randint(obj.track2p_obj.track_ops_dict['n_tracked'])]
 
-                        #roll_by = np.random.randint(obj.dat_subject[day_i]['mean_ordered_grat_responses'].shape[-1])
-                        #vector_j = obj.dat_subject[day_i]['mean_ordered_grat_responses'][:, cell].mean(axis=-1)
+                            #roll_by = np.random.randint(obj.dat_subject[day_i]['mean_ordered_grat_responses'].shape[-1])
+                            #vector_j = obj.dat_subject[day_i]['mean_ordered_grat_responses'][:, cell].mean(axis=-1)
+
+                            corr_coef, p_value = pearsonr(vector_i, vector_j)
+                            null_dist[i_n] = corr_coef
+
+                        correlation_matrix[i, j] = null_dist.mean()
+
+                    else:
+                        # response vector (shape n_orientations) > average across time (average response)
+                        vector_i = obj.dat_subject[day_i][param_matrix_key].mean(axis=(0,-1))[:,cell]
+                        vector_j = obj.dat_subject[day_j][param_matrix_key].mean(axis=(0,-1))[:,cell]
 
                         corr_coef, p_value = pearsonr(vector_i, vector_j)
-                        null_dist[i_n] = corr_coef
+                        correlation_matrix[i, j] = corr_coef
+                elif i == j: #comparing the same day, want to do a split-half reliability metrix
+                    if null_distribution:
 
-                    correlation_matrix[i, j] = null_dist.mean()
+                        param_data = obj.dat_subject[day_i][param_matrix_key]  # (n_repeats, n_orientations, n_cells, n_timepoints)
 
-                else:
-                    # response vector (shape n_orientations) > average across time (average response)
-                    vector_i = obj.dat_subject[day_i]['param_matrix_whole_zscore'].mean(axis=(0,-1))[:,cell]
-                    vector_j = obj.dat_subject[day_j]['param_matrix_whole_zscore'].mean(axis=(0,-1))[:,cell]
+                        # Split data into first half and second half along the first axis (repeats/trials)
+                        half = param_data.shape[0] // 2
+                        vector_first_half = param_data[:half, :, cell, :].mean(axis=(0, -1))  # (n_orientations,)
 
-                    corr_coef, p_value = pearsonr(vector_i, vector_j)
-                    correlation_matrix[i, j] = corr_coef
+                        null_dist = np.zeros(n)
+                        # for the null distribution: shuffle cells across days (or just pick random cells)
+                        for i_n in range(n):
+                            vector_second_half = param_data[half:, :, np.random.randint(obj.track2p_obj.track_ops_dict['n_tracked']), :].mean(axis=(0, -1))  # (n_orientations,)
+
+                            # Compute Pearson correlation between halves
+                            corr_coef, _ = pearsonr(vector_first_half, vector_second_half)
+                            null_dist[i_n] = corr_coef
+
+                        correlation_matrix[i, j] = corr_coef.mean()
+
+                    else:
+                        param_data = obj.dat_subject[day_i][param_matrix_key]  # (n_repeats, n_orientations, n_cells, n_timepoints)
+
+                        # Split data into first half and second half along the first axis (repeats/trials)
+                        half = param_data.shape[0] // 2
+                        vector_first_half = param_data[:half, :, cell, :].mean(axis=(0, -1))  # (n_orientations,)
+                        vector_second_half = param_data[half:, :, cell, :].mean(axis=(0, -1))  # (n_orientations,)
+
+                        # Compute Pearson correlation between halves
+                        corr_coef, _ = pearsonr(vector_first_half, vector_second_half)
+                        correlation_matrix[i, j] = corr_coef
+
         if across_days:
             # corr_values is of shape n_cells
             # correlation_matrix is of shape (n_days, n_days)
-            corr_values[cell] = correlation_matrix.mean()
+            # want to exclude within-day comparisons
+            corr_values[cell] = correlation_matrix[np.triu_indices(correlation_matrix.shape[0], k=1)].mean()
+
         else:
             # corr_values is of shape (n_days, n_cells)
             # correlation_matrix is of shape (n_days, n_days) > only take 1st row because it compares day 1 with all other days

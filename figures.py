@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+import numpy as np
+from imports import *
+from helpers import *
 
 def adjust_image (img, brightness = 0.5, contrast = 2.2):
-
     img = (img - img.min()) / (img.max() - img.min())  # normalize to range [0, 1]
     adjusted_img = (img - 0.5) * contrast + 0.5 + brightness
     adjusted_img = np.clip(adjusted_img, 0, 1)  # clip to avoid overflow
@@ -153,7 +155,7 @@ def polar_plots_across_days_rois(obj, cells_to_plot = [10,21,75,103]):
     plt.savefig(os.path.join(folder_path, f'rois_days.png'))
     plt.show()
 
-def plot_raw_responses (object, animal):
+def plot_raw_responses (object, animal, svd = False):
     '''
     Plot the trace of 20 random cells + the start of each TTL (grey dotted line)
     :param object:
@@ -163,7 +165,10 @@ def plot_raw_responses (object, animal):
     n_cells_to_plot = 8
     first_minutes = 5
     for day in object.dat_subject.keys():
-        data_array = object.dat_subject[day]['tracked_fluorescence']#[:, 12*60*object.fps:13.5*60*object.fps]#[:, :first_minutes*60*object.fps]
+        data_array = object.dat_subject[day]['zscored_tracked_fluorescence']#[:, 12*60*object.fps:13.5*60*object.fps]#[:, :first_minutes*60*object.fps]
+        if svd:
+            u, s, vt = np.linalg.svd(data_array)
+            data_array = u[:, :2].reshape(-1, 2) @ np.diag(s[:2]) @ vt[:2].reshape(2, -1)
         ttl = object.dat_subject[day]['ttl_data']
         cells = [int(num) for num in np.linspace(0, data_array.shape[0]-1, n_cells_to_plot)]
         fig, ax = plt.subplots(figsize=(8.5, 7))
@@ -172,7 +177,7 @@ def plot_raw_responses (object, animal):
         fig.tight_layout()
         global_counter = 0
         for i_cell, cell in enumerate(cells):
-            plt.plot( gaussian_filter1d(global_counter+data_array[cell,:]/data_array[cell,:].max(), sigma = 0.8), color=colors[cell], alpha = 0.8, linewidth = 2.2)
+            plt.plot( gaussian_filter1d(global_counter+data_array[cell,:]/data_array[cell,:].max(), sigma = 0.1), color=colors[cell], alpha = 0.8, linewidth = 2.2)
             # plt.plot(global_counter + data_array[cell, :] / data_array[cell, :].max(),
             #          color=colors[cell], alpha=0.8)
             global_counter += 0.5
@@ -185,7 +190,7 @@ def plot_raw_responses (object, animal):
         #ax.set_xlabel('Time', fontsize=14)
         #ax.set_ylabel('Cell #', fontsize=14)
         plt.subplots_adjust(top=0.95)
-        plt.xlim([12 * 60 * object.fps, 14 * 60 * object.fps])
+        plt.xlim([3 * 60 * object.fps, 5 * 60 * object.fps])
         plt.tight_layout()
         #plt.xlim([12*60*object.fps,14*60*object.fps])
         plt.show()
@@ -324,6 +329,11 @@ def plot_response(object, cell_i = 0):
 
 
 def plot_corr (obj, n = 1000, cumulative = False, across_days = False):
+    # 0 > within day (0 with 0)
+    # 1 > across day (0 with 1)
+    # 2 > across day (0 with 2)
+    # 3 > across day (0 with 3)
+    # 4 > across day (0 with 4)
 
     if across_days:
 
@@ -333,7 +343,7 @@ def plot_corr (obj, n = 1000, cumulative = False, across_days = False):
         min_corr = np.min((vec.min(), vec_null.min()))
 
         if not cumulative:
-            bin_edges = np.linspace(min(vec.min(), vec_null.min()), max(vec.max(), vec_null.max()), 15)
+            bin_edges = np.linspace(min(vec.min(), vec_null.min()), max(vec.max(), vec_null.max()), 10)
 
             #fig, ax = plt.subplots(1,2, sharey = True,figsize = (8,5))
             plt.figure(figsize=(5, 5))
@@ -371,20 +381,26 @@ def plot_corr (obj, n = 1000, cumulative = False, across_days = False):
             plt.title("Cumulative correlation distribution", fontsize  = 16)
             plt.show()
 
-    else:
+    else: # across days is false
         vec_null = corr_vector(obj, n = n, null_distribution=True, across_days = across_days)
         vec = corr_vector(obj, null_distribution=False, across_days=across_days)
 
-        fig, ax = plt.subplots(1, len(obj.days)-1, sharey = True, sharex = True, figsize = (7.5,5))
+        fig, ax = plt.subplots(1, len(obj.days), sharey = True, sharex = True, figsize = (10,8))
 
-        for i in range(1, len(obj.days)):
+        for i in range(0, len(obj.days)):
+            print(f'day {i}')
+            stat, p_val = ks_2samp(vec[i], vec_null[i])
+            print(f"KS test: D = {stat:.3f}, p = {p_val:.3e}")
+
+        for i in range(0, len(obj.days)):
             ax[i-1].hist(vec[i], color='lightsalmon', alpha = 0.8, bins = np.linspace(vec.min(), 1, 10), label = 'Aligned')
 
-        for i in range(1, len(obj.days)):
-            ax[i-1].set_xlabel('Pearson (r) correlation')
-            ax[i-1].set_ylabel('Cell count')
-            ax[i-1].set_title(f'Correlation distribution (day1 - day{i+1})')
-            ax[i-1].hist(vec_null[i], color='gray',alpha = 0.6, bins = np.linspace(vec.min(), 1, 10), label = 'Shuffled')
+        for i in range(0, len(obj.days)):
+            ax[i].set_xlabel('Pearson (r) correlation')
+            ax[i].set_ylabel('Cell count')
+            ax[i].set_title(f'day 1 - day{i+1}')
+            ax[i].hist(vec_null[i], color='gray',alpha = 0.6, bins = np.linspace(vec.min(), 1, 10), label = 'Shuffled')
+        plt.suptitle('Correlation distribution')
         plt.tight_layout()
         plt.legend()
         plt.show()
@@ -411,7 +427,6 @@ def hist_osi_angle (obj):
 
         for i, day in enumerate(obj.dat_subject.keys()):
             if 'preferred' in metric:
-
                 data = np.deg2rad(obj.dat_subject[day][metric])
                 min_val, max_val = int(np.round(data.min())), int(np.round(data.max()))
                 bins = np.linspace(min_val, max_val, 25)
@@ -424,7 +439,13 @@ def hist_osi_angle (obj):
                 width = np.diff(bin_edges)  # Width of each bin for plotting
 
                 # Plot the histogram on the polar axis
-                ax[i].bar(theta, radii, width=width, bottom=0.0, color=c, alpha=0.7, label=f'Cell count, {day}')
+
+                if 'orientation' in metric:
+                    mask = (theta >= np.deg2rad(-90)) & (theta <= np.deg2rad(90))
+                    ax[i].bar(theta[mask], radii[mask], width=width[mask], bottom=0.0, color=c, alpha=0.7, label=f'Cell count, {day}')
+
+                else:
+                    ax[i].bar(theta, radii, width=width, bottom=0.0, color=c, alpha=0.7, label=f'Cell count, {day}')
 
                 # Optionally, adjust the limits and titles
                 ax[i].set_ylim(0, max(radii) + 10)  # Adjust the radial axis limit
@@ -438,11 +459,12 @@ def hist_osi_angle (obj):
                 ax[i].set_rticks(np.round(np.linspace(0, rmax, 2),1))  # set_rticks(np.round(np.linspace(0, rmax, 2),1))
                 ax[i].grid(True)
 
+
             else:
                 data = obj.dat_subject[day][metric]
                 min_val, max_val = int(np.round(data.min())), int(np.round(data.max()))
                 bins = np.linspace(min_val, max_val, 25)
-                ax[i].hist(obj.dat_subject[day][metric], color =  c, alpha = 0.7, density = True, label = f'Cell count, {day}', bins = bins)
+                ax[i].hist(obj.dat_subject[day][metric], color =  c, alpha = 0.7, label = f'Cell count, {day}', bins = bins)
                 ax[i].set_xlim([min_val-(max_val/10), max_val+(max_val/10)])
                 ax[i].set_xticks ([int(x) for x in np.linspace(min_val, max_val, 2)])
 
