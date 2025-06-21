@@ -3,16 +3,18 @@ from imports import *
 
 class track2pPreprocessing:
 
-    def __init__(self, main_path, subject, track2p_folder_name, single_plane = True, deconvolved = False):
+    def __init__(self, main_path, subject, tracked_cells, track2p_folder_name, single_plane = True):
 
         self.main_path = main_path
         self.subject = subject
+        self.tracked_cells = tracked_cells
         self.track2p_folder_name = track2p_folder_name
         self.single_plane = single_plane
         self.meanImg = []
-        self.deconvolved = deconvolved      # whether or not we want to use deconvolved spikes (deconvolved = True) or raw fluorescence (deconvolved = False)
+        #self.deconvolved = deconvolved      # whether or not we want to use deconvolved spikes (deconvolved = True) or raw fluorescence (deconvolved = False)
         self.load_track2p_output()
-        self.track_cells()
+        if self.tracked_cells:
+            self.track_cells()
 
     def load_track2p_output (self):
         '''
@@ -74,7 +76,8 @@ class track2pPreprocessing:
 
         #self.['meanImg'] = []
         self.all_stat_t2p = []
-        self.all_f_t2p = []
+        self.all_f_t2p_spikes = [] # deconvolved traces, spikes
+        self.all_f_t2p_traces = [] # fluorescence
         self.all_ops = []  # ops dont change
 
         for (i, ds_path) in enumerate(self.track_ops.all_ds_path):
@@ -91,31 +94,33 @@ class track2pPreprocessing:
 
             self.meanImg.append(ops['meanImg'])
 
-            if self.deconvolved: # use spikes
-                if self.track_ops.iscell_thr is None:
-                    stat_iscell = stat[iscell[:, 0] == 1]
-                    f_iscell = spikes[iscell[:, 0] == 1, :]
+            # if self.deconvolved: # use spikes
+            #load spikes (deconvolved)
+            if self.track_ops.iscell_thr is None:
+                stat_iscell = stat[iscell[:, 0] == 1]
+                f_iscell_spikes = spikes[iscell[:, 0] == 1, :]
+            else:
+                stat_iscell = stat[iscell[:, 1] > iscell_thr]
+                f_iscell_spikes = spikes[iscell[:, 1] > iscell_thr, :]
 
-                else:
-                    stat_iscell = stat[iscell[:, 1] > iscell_thr]
-                    f_iscell = spikes[iscell[:, 1] > iscell_thr, :]
+            # load raw fluorescence traces
+            # when using fluorescence (f) > need to subtract neuropil (F - 0.7*Fneu) > to get real fluorescence signal
+            f -= 0.7 * fneu
+            if self.track_ops.iscell_thr == None:
+                stat_iscell = stat[iscell[:, 0] == 1]
+                f_iscell_traces = f[iscell[:, 0] == 1, :]
 
-            else:  # use raw fluorescence
-                # when using fluorescence (f) > need to subtract neuropil (F - 0.7*Fneu) > to get real fluorescence signal
-                f -= 0.7 * fneu
-                if self.track_ops.iscell_thr == None:
-                    stat_iscell = stat[iscell[:, 0] == 1]
-                    f_iscell = f[iscell[:, 0] == 1, :]
-
-                else:
-                    stat_iscell = stat[iscell[:, 1] > iscell_thr]
-                    f_iscell = f[iscell[:, 1] > iscell_thr, :]
+            else:
+                stat_iscell = stat[iscell[:, 1] > iscell_thr]
+                f_iscell_traces = f[iscell[:, 1] > iscell_thr, :]
 
             stat_t2p = stat_iscell[self.t2p_match_mat_allday[:, i].astype(int)]
-            f_t2p = f_iscell[self.t2p_match_mat_allday[:, i].astype(int), :]
+            f_t2p_traces = f_iscell_traces[self.t2p_match_mat_allday[:, i].astype(int), :]
+            f_t2p_spikes = f_iscell_spikes[self.t2p_match_mat_allday[:, i].astype(int), :]
 
             self.all_stat_t2p.append(stat_t2p)
-            self.all_f_t2p.append(f_t2p)
+            self.all_f_t2p_spikes.append(f_t2p_spikes)
+            self.all_f_t2p_traces.append(f_t2p_traces)
             self.all_ops.append(ops)
 
 ############################################################################################################################

@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+
 from imports import *
 
 def load_stims (self, path_to_log):
@@ -160,7 +162,7 @@ def get_ttl_dicts (obj, obj_dat_subject_day):
 #     self.dat[animal][day][sub_file]['baseline_zscore_responses_ttls'] =
 #     (self.dat[animal][day][sub_file]['responses_ttls'] - baseline_mean) / baseline_std
 
-def get_neuronal_responses_ttls (obj, day):
+def get_neuronal_responses_ttls (obj, day, recording):
     '''
     Indexes the tracked neuronal responses according to the ttl values for each stimulus
 
@@ -170,37 +172,37 @@ def get_neuronal_responses_ttls (obj, day):
     '''
 
     # load corrected ttl data into a dictionary with stim type (key) and array of ttls (value) (shape: n_stim_presentations x 2)
-    dict_stim_ttls = get_ttl_dicts(obj, obj.dat_subject[day])
+    dict_stim_ttls = get_ttl_dicts(obj, obj.dat_subject[day][recording])
 
-    fluorescence = obj.dat_subject[day]['tracked_fluorescence']
-    zscore_fluorescence = obj.dat_subject[day]['zscored_tracked_fluorescence']
+    fluorescence = obj.dat_subject[day][recording]['deconvolved']
+    zscore_fluorescence = obj.dat_subject[day][recording]['zscored_deconvolved']
     fps = obj.fps
 
     # create a dictionary that holds the neural activity for each pair of TTLs (in chronological order)
-    obj.dat_subject[day]['responses_ttls'] = {}
-    obj.dat_subject[day]['responses_ttls_whole'] = {}
-    obj.dat_subject[day]['zscored_responses_ttls'] = {}
-    obj.dat_subject[day]['zscored_responses_ttls_whole'] = {}
+    obj.dat_subject[day][recording]['responses_ttls'] = {}
+    obj.dat_subject[day][recording]['responses_ttls_whole'] = {}
+    obj.dat_subject[day][recording]['zscored_responses_ttls'] = {}
+    obj.dat_subject[day][recording]['zscored_responses_ttls_whole'] = {}
 
     for stim in dict_stim_ttls.keys():
-        obj.dat_subject[day]['responses_ttls'][stim] = []
-        obj.dat_subject[day]['responses_ttls_whole'][stim] = []
-        obj.dat_subject[day]['zscored_responses_ttls'][stim] = []
-        obj.dat_subject[day]['zscored_responses_ttls_whole'][stim] = []
+        obj.dat_subject[day][recording]['responses_ttls'][stim] = []
+        obj.dat_subject[day][recording]['responses_ttls_whole'][stim] = []
+        obj.dat_subject[day][recording]['zscored_responses_ttls'][stim] = []
+        obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim] = []
 
         for [start_ttl, end_ttl] in dict_stim_ttls[stim]:
             if 'Wait' in stim:  # take entire wait period
-                obj.dat_subject[day]['responses_ttls'][stim].append(fluorescence[:, start_ttl:end_ttl])
-                obj.dat_subject[day]['responses_ttls_whole'][stim].append(fluorescence[:, start_ttl:end_ttl])
-                obj.dat_subject[day]['zscored_responses_ttls'][stim].append(zscore_fluorescence[:, start_ttl:end_ttl])
-                obj.dat_subject[day]['zscored_responses_ttls_whole'][stim].append(zscore_fluorescence[:, start_ttl:end_ttl])
+                obj.dat_subject[day][recording]['responses_ttls'][stim].append(fluorescence[:, start_ttl:end_ttl])
+                obj.dat_subject[day][recording]['responses_ttls_whole'][stim].append(fluorescence[:, start_ttl:end_ttl])
+                obj.dat_subject[day][recording]['zscored_responses_ttls'][stim].append(zscore_fluorescence[:, start_ttl:end_ttl])
+                obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim].append(zscore_fluorescence[:, start_ttl:end_ttl])
             elif 'Grating' in stim:  # 1s static + 3s moving + 1s off > only use 3 sec moving
-                obj.dat_subject[day]['responses_ttls'][stim].append(fluorescence[:, start_ttl + (fps * 1): start_ttl + (fps * 4)])
-                obj.dat_subject[day]['zscored_responses_ttls'][stim].append(zscore_fluorescence[:, start_ttl + (fps * 1):  start_ttl + (fps * 4)])
+                obj.dat_subject[day][recording]['responses_ttls'][stim].append(fluorescence[:, start_ttl + (fps * 1): start_ttl + (fps * 4)])
+                obj.dat_subject[day][recording]['zscored_responses_ttls'][stim].append(zscore_fluorescence[:, start_ttl + (fps * 1):  start_ttl + (fps * 4)])
 
                 # 1 s before stim + 1s static + 3s moving
-                obj.dat_subject[day]['responses_ttls_whole'][stim].append(fluorescence[:, start_ttl - (fps * 1): start_ttl + (fps * 4)])
-                obj.dat_subject[day]['zscored_responses_ttls_whole'][stim].append(zscore_fluorescence[:, start_ttl - (fps * 1): start_ttl + (fps * 4)])
+                obj.dat_subject[day][recording]['responses_ttls_whole'][stim].append(fluorescence[:, start_ttl - (fps * 1): start_ttl + (fps * 4)])
+                obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim].append(zscore_fluorescence[:, start_ttl - (fps * 1): start_ttl + (fps * 4)])
 
             # elif 'Image' in stim:  # 0.5s on + 1.5s off + 1.3-1.7s jitter > only use 0.5s on
             #     obj.dat_subject[day]['responses_ttls'][stim].append(fluorescence[:, start_ttl:int(start_ttl + (fps * 0.5))])
@@ -210,26 +212,26 @@ def get_neuronal_responses_ttls (obj, day):
         if 'Grating' in stim:  # in order to have an array of shape stimulus x cells x time, everything needs to be the same shape
             #max_size = min([l.shape[-1] for l in obj.dat_subject[day]['responses_ttls'][stim]])
             #obj.dat_subject[day]['responses_ttls'][stim] = np.array([n[:, :max_size] for n in obj.dat_subject[day]['responses_ttls'][stim]])
-            obj.dat_subject[day]['responses_ttls'][stim] = np.array([n for n in obj.dat_subject[day]['responses_ttls'][stim]])
-            obj.dat_subject[day]['responses_ttls_whole'][stim] = np.array([n for n in obj.dat_subject[day]['responses_ttls_whole'][stim]])
-            obj.dat_subject[day]['zscored_responses_ttls'][stim] = np.array([n for n in obj.dat_subject[day]['zscored_responses_ttls'][stim]])
-            obj.dat_subject[day]['zscored_responses_ttls_whole'][stim] = np.array([n for n in obj.dat_subject[day]['zscored_responses_ttls_whole'][stim]])
+            obj.dat_subject[day][recording]['responses_ttls'][stim] = np.array([n for n in obj.dat_subject[day][recording]['responses_ttls'][stim]])
+            obj.dat_subject[day][recording]['responses_ttls_whole'][stim] = np.array([n for n in obj.dat_subject[day][recording]['responses_ttls_whole'][stim]])
+            obj.dat_subject[day][recording]['zscored_responses_ttls'][stim] = np.array([n for n in obj.dat_subject[day][recording]['zscored_responses_ttls'][stim]])
+            obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim] = np.array([n for n in obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim]])
 
         elif 'Image' in stim:
-            obj.dat_subject[day]['responses_ttls'][stim] = np.array(obj.dat_subject[day]['responses_ttls'][stim])
-            obj.dat_subject[day]['responses_ttls_whole'][stim] = np.array(obj.dat_subject[day]['responses_ttls_whole'][stim])
-            obj.dat_subject[day]['zscored_responses_ttls'][stim] = np.array(obj.dat_subject[day]['zscored_responses_ttls'][stim])
-            obj.dat_subject[day]['zscored_responses_ttls_whole'][stim] = np.array(obj.dat_subject[day]['zscored_responses_ttls_whole'][stim])
+            obj.dat_subject[day][recording]['responses_ttls'][stim] = np.array(obj.dat_subject[day][recording]['responses_ttls'][stim])
+            obj.dat_subject[day][recording]['responses_ttls_whole'][stim] = np.array(obj.dat_subject[day][recording]['responses_ttls_whole'][stim])
+            obj.dat_subject[day][recording]['zscored_responses_ttls'][stim] = np.array(obj.dat_subject[day][recording]['zscored_responses_ttls'][stim])
+            obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim] = np.array(obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim])
         elif 'Wait' in stim:  # outputs a singleton dimension, so we want to use np.squeeze
-            obj.dat_subject[day]['responses_ttls'][stim] = np.squeeze(np.array(obj.dat_subject[day]['responses_ttls'][stim]))
-            obj.dat_subject[day]['zscored_responses_ttls'][stim] = np.squeeze(np.array(obj.dat_subject[day]['responses_ttls'][stim]))
-            obj.dat_subject[day]['responses_ttls_whole'][stim] = np.squeeze(np.array(obj.dat_subject[day]['responses_ttls_whole'][stim]))
-            obj.dat_subject[day]['zscored_responses_ttls_whole'][stim] = np.squeeze(np.array(obj.dat_subject[day]['zscored_responses_ttls_whole'][stim]))
+            obj.dat_subject[day][recording]['responses_ttls'][stim] = np.squeeze(np.array(obj.dat_subject[day][recording]['responses_ttls'][stim]))
+            obj.dat_subject[day][recording]['zscored_responses_ttls'][stim] = np.squeeze(np.array(obj.dat_subject[day][recording]['responses_ttls'][stim]))
+            obj.dat_subject[day][recording]['responses_ttls_whole'][stim] = np.squeeze(np.array(obj.dat_subject[day][recording]['responses_ttls_whole'][stim]))
+            obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim] = np.squeeze(np.array(obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim]))
 
-        obj.dat_subject[day]['responses_ttls'][stim] = np.array(obj.dat_subject[day]['responses_ttls'][stim])
-        obj.dat_subject[day]['responses_ttls_whole'][stim] = np.array(obj.dat_subject[day]['responses_ttls_whole'][stim])
-        obj.dat_subject[day]['zscored_responses_ttls'][stim] = np.array(obj.dat_subject[day]['zscored_responses_ttls'][stim])
-        obj.dat_subject[day]['zscored_responses_ttls_whole'][stim] = np.array(obj.dat_subject[day]['zscored_responses_ttls_whole'][stim])
+        obj.dat_subject[day][recording]['responses_ttls'][stim] = np.array(obj.dat_subject[day][recording]['responses_ttls'][stim])
+        obj.dat_subject[day][recording]['responses_ttls_whole'][stim] = np.array(obj.dat_subject[day][recording]['responses_ttls_whole'][stim])
+        obj.dat_subject[day][recording]['zscored_responses_ttls'][stim] = np.array(obj.dat_subject[day][recording]['zscored_responses_ttls'][stim])
+        obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim] = np.array(obj.dat_subject[day][recording]['zscored_responses_ttls_whole'][stim])
 
 def parse_grating_string(s):
     '''
@@ -255,7 +257,7 @@ def parse_grating_array (arr):
     np.set_printoptions(suppress=True, precision=4)
     return np.array([parse_grating_string(s) for s in arr])
 
-def build_parameter_matrix(object, day, response_window = 'whole', zscore = True):
+def build_parameter_matrix(object, day, recording, response_window = 'whole', zscore = True):
     '''
     :param object:  data_object
     :param animal:
@@ -267,7 +269,7 @@ def build_parameter_matrix(object, day, response_window = 'whole', zscore = True
     '''
 
     # each of shape (n_repeats, x nORI) > parameters for stimuli shown for each repeat
-    thetas_stim = object.dat_subject[day]['thetas']
+    thetas_stim = object.dat_subject[day][recording]['thetas']
 
     # array of orientations shown (shape n_orientations), in increasing order
     thetas = np.unique(thetas_stim)
@@ -275,14 +277,14 @@ def build_parameter_matrix(object, day, response_window = 'whole', zscore = True
     # dictionary - 1 key per repeat. each repeat contains array of shape (nSF x nOri, timepoints)
     if response_window == 'whole':      # 1s wait + 1s static + 3s moving + 1s wait
         if zscore:
-            responses_ttls = object.dat_subject[day]['zscored_responses_ttls_whole']
+            responses_ttls = object.dat_subject[day][recording]['zscored_responses_ttls_whole']
         else:
-            responses_ttls = object.dat_subject[day]['responses_ttls_whole']
+            responses_ttls = object.dat_subject[day][recording]['responses_ttls_whole']
     elif response_window == 'moving':   # 3s moving
         if zscore:
-            responses_ttls = object.dat_subject[day]['zscored_responses_ttls']
+            responses_ttls = object.dat_subject[day][recording]['zscored_responses_ttls']
         else:
-            responses_ttls = object.dat_subject[day]['responses_ttls']
+            responses_ttls = object.dat_subject[day][recording]['responses_ttls']
 
     # array shape (n_repeats, nORI, n_cells, timepoints)
     gratings_responses = np.array([responses_ttls[key] for key in responses_ttls.keys() if 'Grating' in key])
@@ -304,12 +306,12 @@ def build_parameter_matrix(object, day, response_window = 'whole', zscore = True
             responses_ordered[i_repeat, i_theta] = gratings_responses[i_repeat, idx]
 
     # store in object
-    object.dat_subject[day][f'param_matrix_{response_window}{zscore*"_zscore"}'] = responses_ordered
+    object.dat_subject[day][recording][f'param_matrix_{response_window}{zscore*"_zscore"}'] = responses_ordered
 
     return responses_ordered, thetas
 
 
-def build_tuning_curves (object, day, zscore = False):
+def build_tuning_curves (object, day, recording, zscore = False):
     '''
     :param object:
     :param animal:
@@ -322,13 +324,13 @@ def build_tuning_curves (object, day, zscore = False):
 
     # response: shape ((n_repeats, n_orientation, cells, timepoints)) > ordered responses
     # 1s wait + 1s static + 3s moving + 1s static
-    response, thetas = build_parameter_matrix(object, day, response_window='whole', zscore=zscore)
+    response, thetas = build_parameter_matrix(object, day, recording, response_window='whole', zscore=zscore)
 
     # baseline period is the average over the first second of stimulus (WAIT period) > shape ((n_repeats, n_orientation/n_SF, cells))
     baseline = response[:, :, :, :object.fps].mean(axis=-1)
 
     # moving period is average of the first 2 seconds moving > shape ((n_repeats, n_orientation/n_SF, cells))
-    tuning_curve_moving = response[:, :, :, 2 * (object.fps):4 * (object.fps):].mean(axis=-1)
+    tuning_curve_moving = response[:, :, :, 2 * (object.fps):4 * (object.fps)].mean(axis=-1)
 
     # baseline subtracted tuning curve, ensuring that all responses are non-negative> shape (on_repeats, n_orientation/n_SF, cells))
     tuning_curve = np.maximum((tuning_curve_moving - baseline), 0)
@@ -376,23 +378,23 @@ def complex_phase_from_tuning (tuning_curves, thetas):
 
     return (complex_ori, osi, pref_orientation), (complex_direction, dsi, pref_direction)
 
-def store_metrics(object, day, response_window = 'whole', zscore = True):
+def store_metrics(object, day, recording, response_window = 'whole', zscore = True):
     '''
     Calculates and stores several important metrics to be plotted by plot_parameter_matrix
     '''
 
     # param_matrix: shape ((n_repeats, n_orientation, n_sf, cells, timepoints))
-    param_matrix, object.dat_subject[day]['orientations'] = build_parameter_matrix(object, day, response_window=response_window, zscore=zscore)
+    param_matrix, object.dat_subject[day][recording]['orientations'] = build_parameter_matrix(object, day, recording, response_window=response_window, zscore=zscore)
 
-    _, object.dat_subject[day]['tuning_curves'], _ = build_tuning_curves(object, day, zscore=False)
+    _, object.dat_subject[day][recording]['tuning_curves'], _ = build_tuning_curves(object, day, recording, zscore=False)
 
-    orientation, direction = complex_phase_from_tuning(object.dat_subject[day]['tuning_curves'], object.dat_subject[day]['orientations'])
+    orientation, direction = complex_phase_from_tuning(object.dat_subject[day][recording]['tuning_curves'], object.dat_subject[day][recording]['orientations'])
 
-    _, object.dat_subject[day]['OSI'], object.dat_subject[day]['preferred_orientation'] = orientation
-    _, object.dat_subject[day]['DSI'], object.dat_subject[day]['preferred_direction'] = direction
+    _, object.dat_subject[day][recording]['OSI'], object.dat_subject[day][recording]['preferred_orientation'] = orientation
+    _, object.dat_subject[day][recording]['DSI'], object.dat_subject[day][recording]['preferred_direction'] = direction
 
 
-def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
+def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days = False):
     '''
     :param obj:
     :param null_distribution:
@@ -403,31 +405,38 @@ def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
     NB: deconvolved must be true
     '''
 
+    dat_object = obj.dat[animal]
+
+    #only looking in days with gratings
+    days_recordings = [(day, subfile) for day in dat_object.dat_subject for subfile in dat_object.dat_subject[day] if 'grat' in subfile]
+    days = [d[0] for d in days_recordings]
+
+
      # if using deconvolved traces, z scoring doesnt make sense (cant have neg values). only use z score if deconvovled = false
-    param_matrix_key = 'param_matrix_whole' if obj.deconvolved else 'param_matrix_whole_zscore'
+    param_matrix_key = 'param_matrix_whole' if dat_object.deconvolved else 'param_matrix_whole_zscore'
 
     if across_days:     # 1 correlation value per cell
-        corr_values = np.zeros(obj.track2p_obj.track_ops_dict['n_tracked'])
+        corr_values = np.zeros(dat_object.track2p_obj.track_ops_dict['n_tracked'])
     else:               # 1 correlation value per day per cell
-        corr_values = np.zeros((len(obj.days), obj.track2p_obj.track_ops_dict['n_tracked']))
+        corr_values = np.zeros((len(days), len(days), dat_object.track2p_obj.track_ops_dict['n_tracked']))
 
-    for cell in tqdm(range(obj.track2p_obj.track_ops_dict['n_tracked']), desc = 'Calculating correlation distribution for each cell'):
-        correlation_matrix = np.zeros((len(obj.days), len(obj.days)))
-        for i, day_i in enumerate(obj.days):
-            for j, day_j in enumerate(obj.days):
+    for cell in tqdm(range(dat_object.track2p_obj.track_ops_dict['n_tracked']), desc = 'Calculating correlation distribution for each cell'):
+        correlation_matrix = np.zeros((len(days), len(days)))
+        for i, day_i in enumerate(days):
+            for j, day_j in enumerate(days):
 
                 if i != j: # if we are comparing two different days
                     if null_distribution:
                         # param_matrix_whole_zscore is : shape (n_repeats, n_orientations, n_cells, n_timepoints)
                         # response vector i > (shape n_orientations) > average response across time
-                        vector_i = obj.dat_subject[day_i][param_matrix_key].mean(axis=(0,-1))[:, cell]
+                        vector_i = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:, cell]
 
                         null_dist = np.zeros(n)
                         # for the null distribution: shuffle cells across days (or just pick random cells)
                         for i_n in range(n):
                             # output of interleave_responses is : shape (n_orientations, n_cells, n_timepoints)
                             # response vector j > (shape n_orientations) > average response across time
-                            vector_j = obj.dat_subject[day_i][param_matrix_key].mean(axis=(0,-1))[:, np.random.randint(obj.track2p_obj.track_ops_dict['n_tracked'])]
+                            vector_j = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:, np.random.randint(dat_object.track2p_obj.track_ops_dict['n_tracked'])]
 
                             #roll_by = np.random.randint(obj.dat_subject[day_i]['mean_ordered_grat_responses'].shape[-1])
                             #vector_j = obj.dat_subject[day_i]['mean_ordered_grat_responses'][:, cell].mean(axis=-1)
@@ -439,15 +448,15 @@ def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
 
                     else:
                         # response vector (shape n_orientations) > average across time (average response)
-                        vector_i = obj.dat_subject[day_i][param_matrix_key].mean(axis=(0,-1))[:,cell]
-                        vector_j = obj.dat_subject[day_j][param_matrix_key].mean(axis=(0,-1))[:,cell]
+                        vector_i = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:,cell]
+                        vector_j = dat_object.dat_subject[day_j]['grat'][param_matrix_key].mean(axis=(0,-1))[:,cell]
 
                         corr_coef, p_value = pearsonr(vector_i, vector_j)
                         correlation_matrix[i, j] = corr_coef
                 elif i == j: #comparing the same day, want to do a split-half reliability metrix
                     if null_distribution:
 
-                        param_data = obj.dat_subject[day_i][param_matrix_key]  # (n_repeats, n_orientations, n_cells, n_timepoints)
+                        param_data = dat_object.dat_subject[day_i]['grat'][param_matrix_key]  # (n_repeats, n_orientations, n_cells, n_timepoints)
 
                         # Split data into first half and second half along the first axis (repeats/trials)
                         half = param_data.shape[0] // 2
@@ -456,16 +465,16 @@ def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
                         null_dist = np.zeros(n)
                         # for the null distribution: shuffle cells across days (or just pick random cells)
                         for i_n in range(n):
-                            vector_second_half = param_data[half:, :, np.random.randint(obj.track2p_obj.track_ops_dict['n_tracked']), :].mean(axis=(0, -1))  # (n_orientations,)
+                            vector_second_half = param_data[half:, :, np.random.randint(dat_object.track2p_obj.track_ops_dict['n_tracked']), :].mean(axis=(0, -1))  # (n_orientations,)
 
                             # Compute Pearson correlation between halves
                             corr_coef, _ = pearsonr(vector_first_half, vector_second_half)
                             null_dist[i_n] = corr_coef
 
-                        correlation_matrix[i, j] = corr_coef.mean()
+                        correlation_matrix[i, j] = null_dist.mean()
 
                     else:
-                        param_data = obj.dat_subject[day_i][param_matrix_key]  # (n_repeats, n_orientations, n_cells, n_timepoints)
+                        param_data = dat_object.dat_subject[day_i]['grat'][param_matrix_key]  # (n_repeats, n_orientations, n_cells, n_timepoints)
 
                         # Split data into first half and second half along the first axis (repeats/trials)
                         half = param_data.shape[0] // 2
@@ -484,8 +493,8 @@ def corr_vector (obj, null_distribution = False, n = 1000, across_days = False):
 
         else:
             # corr_values is of shape (n_days, n_cells)
-            # correlation_matrix is of shape (n_days, n_days) > only take 1st row because it compares day 1 with all other days
-            corr_values[:, cell] = np.array(correlation_matrix[:, 0])
+            # correlation_matrix is of shape (n_days, n_days) > only take 1st row because it compares day 1 with all other days > changed to taking whole array (also want to compare day2 with itself)
+            corr_values[:, :, cell] = np.array(correlation_matrix)
 
     return corr_values
 
@@ -775,65 +784,6 @@ def plot_curve_polar(object, roi):
     plt.show()
     plt.savefig(fr'C:\Users\erica\OneDrive\Desktop\roi{roi}.png')
 
-
-def polar_plots_across_days(obj):
-    '''
-    plot orientation tuning curves as circular polar plots
-
-    for each ROI, plot tuning curve for each day separately
-    :param obj:
-    :return:
-    '''
-
-    n_cells = obj.track2p_obj.track_ops.n_tracked
-    days = list(obj.dat_subject.keys())
-    #colors = plt.cm.viridis(n_cells)
-    # variables and dependencies for colour mapping
-    plasma = plt.get_cmap('plasma')
-    cNorm  = colors.Normalize(vmin=0, vmax=n_cells+5)
-    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=plasma)
-    scalarMap.set_array([])
-
-    for cell in np.arange(0,n_cells,1):
-        fig, ax = plt.subplots(1, len(days), subplot_kw={'projection': 'polar'}, figsize=(6, 2.5))
-
-        rmax = np.array([obj.dat_subject[day]['tuning_curves'][cell] / obj.dat_subject[day]['tuning_curves'][cell].sum() for day in days]).max()
-        #max = np.array([suite2p_obj.dat_subject[day]['tuning_curves'][cell] for day in days]).max()
-        for i_day, day in enumerate(days):
-
-            # polar plots need to be plotted in radians
-            # subtract the starting angle so all cells's starting preferred angle is at 0 degrees
-            #theta- theta[0]
-
-            # r = vector of responses for each direction(response vector)
-            r = obj.dat_subject[day]['tuning_curves'][cell]
-            r /= r.sum() # normalizing responses so they're between 0 and 1
-            theta = obj.dat_subject[day]['theta']
-
-            #to join the last point and first point
-            idx = np.arange(r.shape[0] + 1)
-            idx[-1] = 0
-
-            # plotting
-            ax[i_day].plot(theta, r, linewidth = 2, color=scalarMap.to_rgba(cell), alpha = 0.6)
-            ax[i_day].plot(theta[idx], r[idx], linewidth = 2,color=scalarMap.to_rgba(cell), alpha = 0.6)
-            ax[i_day].set_thetagrids([0, 90, 180, 270], y=0.2,
-                                    labels=['0', '\u03c0' + '/2', '\u03c0', '3' + '\u03c0' + '/2'],
-                                    fontsize=8)  # labels = ['0', '','\u03c0','']
-            ax[i_day].set_rmax(rmax)
-            ax[i_day].set_rlabel_position(45) # r is normalized response
-            ax[i_day].tick_params(axis='y', labelsize=8)
-            ax[i_day].set_rticks(np.round(np.linspace(0, rmax, 2),1))
-            ax[i_day].grid(True)
-            ax[i_day].set_title(f'Day {i_day}', fontsize = 10)
-
-        plt.tight_layout(pad=0.9)
-        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.suptitle(f'Tuning Curves  \n ROI #{cell}', fontsize = 12)
-        #plt.show()
-        plt.savefig(fr'C:\Users\erica\OneDrive\Desktop\tuning curves\roi{cell}')
-
-
 def diff_bw_angles(theta1, theta2):
     diff = theta2 - theta1
     if diff < -180:
@@ -1057,4 +1007,504 @@ def suite2p_files (suite2p_path, response_type = 'deconvolved'):
 #     :param date_yymmdd: ex: '20231206'
 #     :return: returns the path to the scanbox file. to view a scanbox file, in the terminal, type f'sbxv
 #
+
+def save_scanbox_img (path_to_img, file_name):
+    '''
+    Saves a .mat imaging file (file_name) located in path_to_image to .png
+    '''
+
+    mat = scipy.io.loadmat(os.path.join(path_to_img, file_name))['img']
+    plt.imsave(os.path.join(path_to_img, os.path.splitext(file_name)[0] + '.png'), mat, cmap='gray')
+
+
+save_scanbox_img (r'I:\dark_drift\data\EC_dark_03\20250526\spon0\spon0_000_000\location', 'wdf_26.37deg.mat')
+
+def save_scanbox_images (path_to_folder):
+    '''
+    Converts all .mat files taken during an imaging session (located in path_to_folder) to .png
+    '''
+
+    to_convert = [f for f in os.listdir(path_to_folder)
+                  if f.lower().endswith('.mat') and os.path.isfile(os.path.join(path_to_folder, f))]
+
+    for file in to_convert:
+        save_scanbox_img(path_to_folder, file)
+
+
+#save_scanbox_images (r'I:\dark_drift\data\EC_dark_03\20250526\spon0\spon0_000_000\location')
+
+############## spontaneous analysis helpers
+
+def compute_coactivation_matrix(data_trials_all, valid_epochs, response_threshold):
+    '''
+    :param data_trials_all:
+    :param valid_epochs:
+    :param response_threshold:
+    :return: symmetric coactivation_matrix, where high values mean two neurons often fire together across epochs.
+    '''
+    n_cells = data_trials_all.shape[1]
+    coactivation_matrix = np.zeros((n_cells, n_cells), dtype=int)
+
+    for epoch in data_trials_all[valid_epochs]:  # shape: (n_cells, n_timepoints)
+        active_cells = np.where(np.any(epoch > response_threshold, axis=1))[0]
+
+        # Count self-activation
+        for i in active_cells:
+            coactivation_matrix[i, i] += 1
+
+        # Count co-activation
+        for i, j in combinations(active_cells, 2):
+            coactivation_matrix[i, j] += 1
+            coactivation_matrix[j, i] += 1
+
+    return coactivation_matrix
+
+def perform_pca (data_trials_normalized, n_components = 10):
+    '''
+    :param data_trials_normalized: array shape (n_trials, n_features), each trial (each row) is normalized to unit length (l2 normalization)
+    '''
+    # performing PCA & projection
+    pca = PCA(n_components=n_components, svd_solver='full') # full forces the lapack solver
+    principal_components = pca.fit_transform(data_trials_normalized)
+    explained_variance_ratio = pca.explained_variance_ratio_ # eigenvalues
+    return pca, principal_components, explained_variance_ratio
+
+def filter_active_epochs (data_trials_array, response_threshold = 3, cell_threshold = 4):
+    '''
+    Remove epochs with no activity or only 1-2 cells active
+    :param data_trials_array: numpy array of shape (n_cells, n_chunks)
+    :param threshold: z-score threshold that cells need to be to be considered active
+    :return:
+    '''
+    # check whether each cell goes above response threshold in each epoch
+    # then count number of cells (per epoch) that exceed response threshold (shape n_epochs)
+    cells_above_threshold = np.any(data_trials_array > response_threshold, axis=-1).sum(axis = -1)
+
+    # valid epochs are only those with > 2 cells co-active (shape n_epochs)
+    valid_epochs = cells_above_threshold >= cell_threshold
+
+    return valid_epochs
+
+
+def decay_eigenspectra(eigenvalues):
+    '''
+    Fit power-law in log-log space
+
+    Power-law: y = Ax**-alpha, where x is the rank, alpha is the slope (rate of decay), A is constant (intercept in log-log space)
+    - to solve for alpha > take log of both sides
+    - > log(y) = log(Ax**-alpha)
+    - > log(y) = log(A) + log(x**-alpha)
+    - > log(y) = log(A) -alpha*log(x)
+    - > log(y) ~= -alpha*log(x)
+    - > log(y)/log(x) ~= -alpha
+
+    :param eigenvalues: variance explained output from PCA
+    :return: -slope
+    '''
+    x = np.arange(1, len(eigenvalues) + 1)
+    log_x = np.log10(x)
+    log_y = np.log10(eigenvalues + 1e-10)  # add epsilon to avoid log(0)
+    slope, intercept, r_value, _, _ = linregress(log_x, log_y)
+    return -slope
+
+def binarize_array(data, threshold=4):
+    return (data >= threshold).astype(int)
+
+
+
+def plot_slope_eigenvals(power_law_slopes):
+
+    plt.figure(figsize=(7, 5))
+
+    colours = {'dark': 'blue', 'control': 'black', 'light': 'red'}
+
+    group_names = list(power_law_slopes.keys())
+
+    # Plot scatter points and means
+    for group in group_names:
+
+        x_pos =[i+1 for i in range(len(power_law_slopes[group]))]
+        slopes = np.array([np.array(vals) for vals in power_law_slopes[group].values()])
+        x_jittered = [x + np.random.normal(-0.05, 0.05, size=len(y_pair)) for x, y_pair in zip(x_pos, slopes)]
+
+        #if plotting each animal an individual colour
+        n_animals = slopes.shape[1]
+        for i_animal in range(n_animals):
+            plt.plot(x_pos, slopes[:, i_animal], marker='o', label=f'animal_{i_animal + 1}', color='grey',alpha=0.4)
+
+        # for x_jit, y_pair in zip(x_jittered, slopes):
+        #     plt.scatter(x_jit, y_pair, color=colours.get(group, 'gray'), alpha=0.4)
+
+        plt.plot([x_pos], [slopes.mean(axis = 1)], marker='d', markersize=10, color=colours.get(group, 'gray'), label=group)
+        plt.plot(x_pos, slopes.mean(axis=1), color=colours.get(group, 'gray'), label=group)
+
+        plt.xticks(x_pos, power_law_slopes[group].keys())
+        plt.xlabel('Recording session')
+        plt.ylabel('Power-law slope (eigenspectrum)')
+        plt.title('Slope of the Eigenspectrum (spont. activity)')
+        plt.grid(axis='y', linestyle='--', alpha=0.5)
+        plt.tight_layout()
+        plt.show()
+
+
+def calculate_animal_age(dob, imaging_date):
+    '''
+    Returns the age of the animal born on DOB, on imaging_date (in post-natal days, and weeks)
+    :param dob: format 'YYYY/MM/DD'
+    :param imaging_date: 'YYYY/MM/DD'
+    :return:
+    '''
+    # Convert input strings to date objects
+    dob = datetime.strptime(dob, "%Y%m%d")
+    imaging_date = datetime.strptime(imaging_date, "%Y%m%d")
+
+    # Calculate the difference between the dates in days
+    age_in_days = (imaging_date - dob).days
+
+    # Calculate weeks and remaining days
+    weeks = age_in_days // 7
+    days = age_in_days % 7
+
+    return f"P{age_in_days}"
+
+
+
+def variance_explained(var_explained_dict, log=False, timepoints = False):
+    """
+    Plot variance explained of different groups in 'var_explained_dict'.
+    If log=True, plot log10(PC index) vs log10(variance explained).
+    """
+
+    plt.figure(figsize=(8, 5))
+    if timepoints:
+        colors = {'Control_0': 'cornflowerblue', 'Control_1': 'darkblue', 'RD1_0': 'salmon', 'RD1_1': 'firebrick'}
+        x = np.arange(1, var_explained_dict['Control_0'].shape[1] + 1)
+    else:
+        colors = {'Control': 'black', 'RD1': 'red', 'GNAT': 'green'}
+        x = np.arange(1, var_explained_dict['Control'].shape[1] + 1)
+    x_plot = np.log10(x) if log else x
+
+    for group, data in var_explained_dict.items():
+        data = np.array(data)
+        if log:
+            data = np.log10(data + 1e-10)
+        mean = data.mean(axis=0)
+        error = sem(data, axis=0)
+
+        c = colors.get(group, 'gray')
+        plt.plot(x_plot, data.T, alpha=0.3, c=c)
+        plt.plot(x_plot, mean, alpha=0.8, c=c, linewidth=2.5, label=group)
+        plt.fill_between(x_plot, mean - error, mean + error, color=c, alpha=0.2)
+
+    plt.legend(fontsize=14)
+    plt.xlabel('log10(PC index)' if log else 'PC index')
+    plt.ylabel('log10(variance explained)' if log else 'Variance explained')
+    plt.title('Log-Log Variance Decay' if log else 'Variance explained by PCs')
+    #plt.grid(True, which='both', linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+def compute_event_features_per_cell(data, z_threshold=3, fps=10):
+    """
+    Compute spontaneous event rates, amplitudes, and durations from z-scored traces.
+
+    Parameters:
+    - data: array of shape (n_cells, n_timepoints)
+    - z_threshold: threshold to detect peaks
+    - fps: imaging frame rate (frames per second)
+
+    Returns:
+    - rates: array of shape (n_cells,) with event rates in Hz
+    - all_amplitudes: list of all peak amplitudes across cells
+    - all_durations: list of all event durations (in seconds) across cells
+    """
+    n_cells, n_timepoints = data.shape
+    duration = n_timepoints / fps  # in seconds
+    rates = np.zeros(n_cells)
+    all_amplitudes = []
+    all_durations = []
+
+    for cell_idx in range(n_cells):
+        trace = data[cell_idx, :]
+        peaks, properties = find_peaks(trace, height=z_threshold)
+        rates[cell_idx] = len(peaks) / duration
+
+        # Collect amplitudes (z-scored peak heights)
+        all_amplitudes.extend(properties["peak_heights"])
+
+        # Collect durations (half-max width in seconds)
+        widths = peak_widths(trace, peaks, rel_height=0.5)[0] / fps
+        all_durations.extend(widths)
+
+    return rates, all_amplitudes, all_durations
+
+
+def plot_spon_event_rate(event_rates_groups, timepoints=False):
+    '''
+    Plotting spontaneous activity rates
+    :param event_rates_groups: dictionary with group data
+    :param timepoints:
+    :return:
+    '''
+    plt.figure(figsize=(5, 4))
+
+    if timepoints:
+        colors = {'Control_0': 'cornflowerblue', 'Control_1': 'darkblue', 'RD1_0': 'salmon', 'RD1_1': 'firebrick'}
+    else:
+        colors = {'Control': 'black', 'RD1': 'red', 'GNAT': 'green'}
+
+    if timepoints:
+        event_rates_groups = {k: v for k, v in event_rates_groups.items() if 'RD1' in k}
+
+    all_counts = np.concatenate([event_rates_groups[g] for g in event_rates_groups])
+    bins = np.linspace(all_counts.min(), all_counts.max(), 30)  # 45 bins
+
+    for g in event_rates_groups.keys():
+        plt.hist(event_rates_groups[g], bins = bins,histtype ='step', linewidth = 2.5, density = True, label = g, color = colors[g], alpha = 1)
+    plt.legend()
+    plt.title('Spontaneous activity rates')
+    plt.xlabel('Spontaneous Event rates (Hz)')
+    plt.ylabel('Probability density')
+    plt.show()
+
+    # Optional: KS test between first two groups
+    group1, group2 = list(event_rates_groups.keys())[:2]
+    stat, pval = ks_2samp(event_rates_groups[group1], event_rates_groups[group2])
+    print(f"KS test between {group1} and {group2}: D = {stat:.3f}, p = {pval:.3e}")
+
+    stat, pval = mannwhitneyu(event_rates_groups[group1], event_rates_groups[group2],alternative='two-sided')
+    print(f"Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
+
+def plot_spon_event_properties(amplitudes, durations, timepoints=False):
+    '''
+    Plotting spontaneous activity rates
+    :param event_rates_groups: dictionary with group data
+    :param timepoints:
+    :return:
+    '''
+    fig, ax = plt.subplots (1,2,figsize=(10, 5))
+
+    if timepoints:
+        colors = {'Control_0': 'cornflowerblue', 'Control_1': 'darkblue', 'RD1_0': 'salmon', 'RD1_1': 'firebrick'}
+    else:
+        colors = {'Control': 'black', 'RD1': 'red', 'GNAT': 'green'}
+
+    if timepoints: # only plot the rd1 data
+        amplitudes = {k: v for k, v in amplitudes.items() if 'RD1' in k}
+        durations = {k: v for k, v in durations.items() if 'RD1' in k}
+
+    # amplitudes:
+    all_counts = np.concatenate([amplitudes[g] for g in amplitudes])
+    bins = np.linspace(all_counts.min(), 15, 30)  #all_counts.max()
+    for g in amplitudes.keys():
+        ax[0].hist(amplitudes[g], bins = bins,histtype ='step', linewidth = 2.5, density = True, label = g, color = colors[g], alpha = 0.7)
+    ax[0].legend()
+    ax[0].set_title('Spontaneous event amplitudes')
+    ax[0].set_xlabel('Spontaneous Event amplitudes (z-score)')
+    ax[0].set_ylabel('Probability density')
+    #plt.show()
+    # stats between first two groups
+    group1, group2 = list(amplitudes.keys())[:2]
+    stat, pval = ks_2samp(amplitudes[group1], amplitudes[group2])
+    print(f"AMPLITUDE: KS test between {group1} and {group2}: D = {stat:.3f}, p = {pval:.3e}")
+    stat, pval = mannwhitneyu(amplitudes[group1], amplitudes[group2],alternative='two-sided')
+    print(f"AMPLITUDE: Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
+
+    # event durations:
+    all_counts = np.concatenate([durations[g] for g in durations])
+    bins = np.linspace(all_counts.min(), 7, 30)  # all_counts.max()
+    for g in durations.keys():
+        ax[1].hist(durations[g], bins = bins,histtype ='step', linewidth = 2.5, density = True, label = g, color = colors[g], alpha = 0.7)
+    ax[1].legend()
+    ax[1].set_title('Spontaneous event duration')
+    ax[1].set_xlabel('Spontaneous Event duration')
+    ax[1].set_ylabel('Probability density')
+
+    # stats between first two groups
+    group1, group2 = list(durations.keys())[:2]
+    stat, pval = ks_2samp(durations[group1], durations[group2])
+    print(f"DURATION: KS test between {group1} and {group2}: D = {stat:.3f}, p = {pval:.3e}")
+    stat, pval = mannwhitneyu(durations[group1], durations[group2],alternative='two-sided')
+    print(f"DURATION: Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
+
+    plt.show()
+
+def plot_fourrier(dom_frequs_dict, power_spec, timepoints=False):
+    '''
+    Plotting spontaneous activity rates
+    :param dom_frequs_dict: dictionary with group data
+    :param timepoints:
+    :return:
+    '''
+    fig, ax = plt.subplots (1,2,figsize=(10, 5))
+
+    if timepoints:
+        colors = {'Control_0': 'cornflowerblue', 'Control_1': 'darkblue', 'RD1_0': 'salmon', 'RD1_1': 'firebrick'}
+    else:
+        colors = {'Control': 'black', 'RD1': 'red', 'GNAT': 'green'}
+
+    if timepoints: # only plot the rd1 data
+        dom_frequs_dict = {k: v for k, v in dom_frequs_dict.items() if 'RD1' in k}
+        power_spec = {k: v for k, v in power_spec.items() if 'RD1' in k}
+
+    # dom freq:
+    all_counts = np.concatenate([dom_frequs_dict[g] for g in dom_frequs_dict])
+    #bins = np.linspace(all_counts.min(), 15, 30)  #all_counts.max()
+    bins = np.linspace(all_counts.min(), all_counts.max(), 30)  # all_counts.max()
+    for g in dom_frequs_dict.keys():
+        ax[0].hist(dom_frequs_dict[g], bins = bins,histtype ='step', linewidth = 2.5, density = True, label = g, color = colors[g], alpha = 0.7)
+    ax[0].legend()
+    ax[0].set_title('Fourier')
+    ax[0].set_xlabel('Dominant frequency per cell')
+    ax[0].set_ylabel('Probability density')
+    #plt.show()
+    # stats between first two groups
+    group1, group2 = list(dom_frequs_dict.keys())[:2]
+    stat, pval = ks_2samp(dom_frequs_dict[group1], dom_frequs_dict[group2])
+    print(f"dom_frequs_dict: KS test between {group1} and {group2}: D = {stat:.3f}, p = {pval:.3e}")
+    stat, pval = mannwhitneyu(dom_frequs_dict[group1], dom_frequs_dict[group2],alternative='two-sided')
+    print(f"dom_frequs_dict: Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
+
+    # power spectrum
+    all_counts = np.concatenate([power_spec[g] for g in power_spec])
+    #bins = np.linspace(all_counts.min(), 15, 30)  #all_counts.max()
+    bins = np.linspace(all_counts.min(), data_object.fps/2, 30)  # all_counts.max()
+    for g in power_spec.keys():
+        plt.plot(fft_freqs, power.mean(axis=0))
+
+        ax[1].hist(power_spec[g], bins = bins,histtype ='step', linewidth = 2.5, density = True, label = g, color = colors[g], alpha = 0.7)
+    ax[1].legend()
+    ax[1].set_title('Fourier')
+    ax[1].set_xlabel('Power spectrum (av. across cells)')
+    ax[1].set_ylabel('Probability density')
+    #plt.show()
+    # stats between first two groups
+    group1, group2 = list(power_spec.keys())[:2]
+    stat, pval = ks_2samp(power_spec[group1], power_spec[group2])
+    print(f"dom_frequs_dict: KS test between {group1} and {group2}: D = {stat:.3f}, p = {pval:.3e}")
+    stat, pval = mannwhitneyu(power_spec[group1], power_spec[group2],alternative='two-sided')
+    print(f"dom_frequs_dict: Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
+    plt.show()
+
+def coactive_cells_per_frame(coactive_counts_groups, timepoints=False):
+    '''
+    Plotting spontaneous activity rates
+    :param event_rates_groups: dictionary with group data
+    :param timepoints:
+    :return:
+    '''
+    plt.figure(figsize=(5, 4))
+
+    if timepoints:
+        colors = {'Control_0': 'cornflowerblue', 'Control_1': 'darkblue', 'RD1_0': 'salmon', 'RD1_1': 'firebrick'}
+    else:
+        colors = {'Control': 'black', 'RD1': 'red', 'GNAT': 'green'}
+
+    if timepoints:
+        coactive_counts_groups = {k: v for k, v in coactive_counts_groups.items() if 'RD1' in k}
+
+        all_counts = np.concatenate([coactive_counts_groups[g] for g in coactive_counts_groups])
+        #all_counts = np.concatenate([coactive_counts_groups[g] for g in [g for g in coactive_counts.keys() if 'Control' not in g]])
+        bins = np.linspace(all_counts.min(), all_counts.max(), 50)  # 45 bins
+
+        for g in coactive_counts_groups.keys(): #[g for g in coactive_counts.keys() if 'Control' not in g]:
+            plt.hist(coactive_counts_groups[g], bins=bins,histtype ='step', linewidth = 2.5, density=True, label=g, color=colors[g], alpha=1)
+    else:
+        all_counts = np.concatenate([coactive_counts_groups[g] for g in coactive_counts_groups])
+        bins = np.linspace(all_counts.min(), all_counts.max(), 110)  # 45 bins
+
+        for g in coactive_counts_groups.keys():
+            plt.hist(coactive_counts_groups[g], bins = bins, histtype ='step', linewidth = 2.5,density = True, label = g, color = colors[g], alpha =1)
+    plt.legend()
+    plt.title('Co-active cells per frame')
+    plt.xlim([0,30])
+    plt.xlabel('Number of co-active cells')
+    plt.ylabel('Probability density')
+    plt.show()
+
+    # Optional: KS test between first two groups
+    group1, group2 = list(coactive_counts_groups.keys())[:2]
+    stat, pval = ks_2samp(coactive_counts_groups[group1], coactive_counts_groups[group2])
+    print(f"KS test between {group1} and {group2}: D = {stat:.3f}, p = {pval:.3e}")
+
+    stat, pval = mannwhitneyu(coactive_counts_groups[group1], coactive_counts_groups[group2],alternative='two-sided')
+    print(f"Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
+
+
+def spontaneous_analysis_slope(obj, coactive_epochs=True, chunk_size=3):
+    '''
+    spontaneous analysis: slope of eigenspectrum across time
+    :param obj:
+    :param coactive_epochs:
+    :param chunk_size:
+    :return:
+    '''
+
+    var_explained = {}  # {'Control_0': [],'Control_1': [], 'RD1_0':[], 'RD1_1':[]}
+    eigenvals_slope = {}  # {'Control_0': [],'Control_1': [], 'RD1_0':[], 'RD1_1':[]}
+
+    for i_animal, animal in enumerate(obj.dat):
+
+        group = 'Control' if 'GCaMP6s' in animal else animal.split('_')[1]
+        days_recordings = [(day, subfile) for day in obj.dat[animal].dat_subject for subfile in
+                           obj.dat[animal].dat_subject[day] if 'spon' in subfile]
+
+        for i, (day, subfile) in enumerate(days_recordings):
+
+            timepoint = calculate_animal_age(obj.animal_dobs[animal], day) + '_s' * int(subfile[-1])
+
+            # shape n_Cells, n_timepoints
+            spon_arr = obj.dat[animal].dat_subject[day][subfile]['zscored_traces']
+
+            if coactive_epochs:
+                n_full_chunks = spon_arr.shape[1] // chunk_size
+
+                # shape > (n_trials, n_features, n_timepoints_per_epoch) (n_epochs, n_cells, n_timepoints)
+                # data_trials = np.array([spon_arr[:,i:i + chunk_size] for i in range(0, n_full_chunks * chunk_size, chunk_size)]).reshape (n_full_chunks, -1)
+                data_trials_all = np.array(
+                    [spon_arr[:, i:i + chunk_size] for i in range(0, n_full_chunks * chunk_size, chunk_size)])
+
+                # only take epochs that have at least 'cell_threshold' co-active cells that each go above 'response_threshold' > (n_epochs, n_cells, n_timepoints)
+                valid_epochs = filter_active_epochs(data_trials_all, response_threshold=3, cell_threshold=5)
+                # plot_raster(data_trials_all, valid_epochs, n_trials_to_plot=60, n_cells_to_plot=400, threshold=4)
+
+                # then average over each epoch (time) to get average response> (n_epochs, n_cells)
+                data_trials = data_trials_all[valid_epochs].mean(axis=-1)
+
+            else:
+                data_trials = spon_arr.T
+            # Normalize each trial's activity pattern (vector) to unit length (L2 norm)
+            # each trial (each row) is normalized to unit length (its L2 norm is 1)
+            norms = np.linalg.norm(data_trials, axis=1, keepdims=True)
+            data_trials_normalized = data_trials / norms
+
+            # performing PCA & projection
+            # explained variance ratio > eigenvalues
+            pca, principal_components, explained_variance_ratio = perform_pca(data_trials_normalized, n_components=50)
+
+            if group in var_explained:
+                if timepoint in var_explained[group]:
+                    var_explained[group][timepoint].append(explained_variance_ratio)
+                else:
+                    var_explained[group][timepoint] = [explained_variance_ratio]
+            else:
+                var_explained[group] = {}
+                var_explained[group][timepoint] = [explained_variance_ratio]
+
+            if group in eigenvals_slope:
+                if timepoint in eigenvals_slope[group]:
+                    eigenvals_slope[group][timepoint].append(decay_eigenspectra(explained_variance_ratio))
+                else:
+                    eigenvals_slope[group][timepoint] = [decay_eigenspectra(explained_variance_ratio)]
+            else:
+                eigenvals_slope[group] = {}
+                eigenvals_slope[group][timepoint] = [decay_eigenspectra(explained_variance_ratio)]
+
+    for group in var_explained:
+        for timepoint in var_explained[group]:
+            var_explained[group][timepoint] = np.array(var_explained[group][timepoint])
+            eigenvals_slope[group][timepoint] = np.array(eigenvals_slope[group][timepoint])
+
+    return var_explained, eigenvals_slope
 

@@ -2,16 +2,38 @@ from track2p.t2p import run_t2p
 from track2p.ops.default import DefaultTrackOps
 import os
 
+def get_earliest_file_time(folder, use_mtime=True):
+    """
+    Return the earliest timestamp (creation or modification) among files inside the folder.
+    If the folder is empty or contains no files, return a large value to sort it last.
+    """
+    timestamps = []
+    for root, _, files in os.walk(folder):
+        for f in files:
+            fpath = os.path.join(root, f)
+            try:
+                time = os.path.getmtime(fpath) if use_mtime else os.path.getctime(fpath)
+                timestamps.append(time)
+            except Exception:
+                pass  # skip problematic files
+    return min(timestamps) if timestamps else float('inf')
+
+
 if __name__ == '__main__':
 
-    animal = 'EC_dark_05'
+    animal = 'EC_dark_08'
+    stim = 'spon' # 'spon'
     root_dir = f'I:\dark_drift\data\{animal}'
     files = []
 
     for dirpath, dirnames, filenames in os.walk(root_dir):
         if os.path.basename(dirpath) == 'experiments':
-            files.append(dirpath)
+            if stim in dirpath:
+                files.append(dirpath)
 
+    # folder creation time
+    #files.sort(key=os.path.getctime)
+    files.sort(key=lambda f: get_earliest_file_time(f, use_mtime=True))
 
     # animal = 'EC_GCaMP6s_09'
     #
@@ -45,10 +67,10 @@ if __name__ == '__main__':
     #         ]
 
     #track_ops.save_path = r'E:\DriftScape\Data\EC_GECO_09\test' # path where to save the outputs of algorithm (a 'track2p' folder will be created where figures for visualisation and matrices of matches would be saved)
-    track_ops.save_path = fr'I:\dark_drift\data\{animal}'  # path where to save the outputs of algorithm (a 'track2p' folder will be created where figures for visualisation and matrices of matches would be saved)
+    track_ops.save_path = fr'I:\dark_drift\data\{animal}\track2p-{stim}'  # path where to save the outputs of algorithm (a 'track2p' folder will be created where figures for visualisation and matrices of matches would be saved)
 
     track_ops.reg_chan = 0 # channel to use for registration (0=functional, 1=anatomical) (use 0 if only recording gcamp!)
-    track_ops.iscell_thr = 0.2 # set this to 0 (basically take all cells)
+    track_ops.iscell_thr = 0.1 # set this to 0 (basically take all cells)
 
     # #print(track_ops)
     # #print(track_ops.save_path)

@@ -6,23 +6,55 @@ from figures import *
 
 #do everything with non deconvolved data (f-0.7*fneu)
 
-animal = 'EC_GCaMP6s_09'
-path = r'I:\dark_drift_trial\data'
-track2p_folder = 'track2p - 10 weeks'
-suite2p_obj = suite2pPreprocessing(animal, path, track2p_folder, ntheta = 8, fps = 20, deconvolved = True)
+# animal = 'EC_dark_01'
+# path = r'I:\dark_drift\data'
+# track2p_folder = 'track2p'
+# suite2p_obj = suite2pPreprocessing(animal, path, track2p_folder, ntheta = 8, fps = 20, deconvolved = True)
 
-# figures for proposal
-fov_across_days(suite2p_obj, brightness = 0.5, contrast = 2.2)
-hist_osi_angle (suite2p_obj)        # use deconvolved
-plot_response(suite2p_obj, cell_i = 5) # use fluorescence traces
-rasters_across_days(suite2p_obj)
-polar_plots_across_days_rois(suite2p_obj, cells_to_plot = [10,21,75,103])
-polar_plots_across_days(suite2p_obj, cell = 5)
-plot_rois_across_days (suite2p_obj, suite2p_obj.track2p_obj, 65, n_cells_to_plot = 2, brightness = 0.5, contrast = 1) # just keep reruning this if it doesn't plot
+animals = ['EC_dark_01', 'EC_dark_03', 'EC_dark_05', 'EC_dark_08'] #['EC_dark_01', 'EC_dark_03'] #'EC_dark_05', 'EC_dark_08']
+
+animal_dobs = {'EC_dark_01': '20250331',
+               'EC_dark_03': '20250331',
+               'EC_dark_05': '20250401',
+               'EC_dark_08': '20250401',
+               }
+
+path = r'I:\dark_drift\data'
+data_object = batchProcessing(animals, animal_dobs, path,
+                              stim = 'grat',
+                              tracked_cells = True,
+                              ntheta = 8,
+                              fps = 20,
+                              deconvolved = True)
+
+animal = 'EC_dark_01'
+if (data_object.tracked_cells) and (data_object.stim == 'grat'):
+    for animal in data_object.list_animals:
+        fov_across_days(data_object, brightness = 0.5, contrast = 2.2)
+        plot_response(data_object, animal)
+        rasters_across_days(data_object, animal)
+        polar_plots_across_days(data_object, animal)
+        polar_plots_across_days_rois(data_object, animal)
+        #plot_corr(data_object, animal, n=1000, across_days=False) # includes within-day shuffle
+        # add activity threshold
+
+elif (not data_object.tracked_cells) and (data_object.stim == 'grat'):
+    hist_osi_angle(data_object)  # use deconvolved
+    polar_plots(data_object, animal) #tuning curves of all rois
+
+elif (data_object.stim == 'spon')
+    var_explained, slope_eigenvals = spontaneous_analysis_slope(data_object)
+    del slope_eigenvals['dark']['P70_s']
+    plot_slope_eigenvals(slope_eigenvals)
 
 
-plot_raw_responses (suite2p_obj, animal)
-plot_response(suite2p_obj, cell_i = 5)
+plot_rois_across_days (data_object,animal, 65, n_cells_to_plot = 2, brightness = 0.5, contrast = 1) # just keep reruning this if it doesn't plot
+plot_raw_responses (data_object, animal)
+plot_response(data_object,animal, cell_i = 5)
+plot_corr(data_object, animal, n = 3, across_days = False)
+
+# stuff to analyze: # cells that are sileneced/inhibited by visual stims, are cells that are spontaneously active just as active with gratings?
+# to do: verify tracking of ROIs, output all of the tuning curves and polar plots, automatially save correlation plots
 
 # to upload
 # >> git status
@@ -33,7 +65,6 @@ plot_response(suite2p_obj, cell_i = 5)
 # to stage and commit all in one line: git commit -am "Quick update"
 
 
-plot_corr(suite2p_obj,n = 1000, across_days = True)
 
 
 
