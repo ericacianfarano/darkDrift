@@ -338,6 +338,163 @@ def build_tuning_curves (object, day, recording, zscore = False):
     return response, tuning_curve, thetas
 
 
+
+
+def deltaf_over_f(obj, param_matrix):
+    '''
+    calculate delta f / f (Orientations x Repeats)
+
+    :param param_matrix: shape (n_repeats, n_ori, n_cells, n_timepoints)
+    :return: dF/F matrix shape (n_repeats, n_ori, n_cells, n_timepoints)
+    '''
+
+    # take the mean over the first second of the resposne, across all dimensions except cells
+    # baseline_F is of shape n_cells
+    baseline_F = param_matrix[..., :obj.fps].mean(axis=(0, 1, -1), keepdims=True)
+
+    return (param_matrix - baseline_F) / baseline_F
+
+
+def zscore_baseline(obj, param_matrix):
+    '''
+    z-score the parameter matrix according to the baseline period for each trial (ori x repeats)
+
+    :param param_matrix: shape (n_repeats, n_ori, n_cells, n_timepoints)
+    :return: z scored matrix shape (n_repeats, n_ori, n_cells, n_timepoints)
+    '''
+
+    # take first second of response (baseline) > mean/std across time/orientation/repeat axis
+    # baseline_mean and baseline_std are of shape (n_cells)
+    baseline_mean = param_matrix[..., :obj.fps].mean(axis=(0, 1, -1), keepdims=True)
+    baseline_std = param_matrix[..., :obj.fps].std(axis=(0, 1, -1), keepdims=True)
+
+    # z score the response, and then average across repeats (shape = ((n_repeats, n_ori, n_cells, n_timepoints)
+    return ((param_matrix - baseline_mean) / baseline_std)
+
+def get_cell_by_cell_threshold (obj, param_matrix, zscore_threshold = None, std_threshold = None): #TO DO !!!!!
+    '''
+    :param param_matrix: shape = ((n_repeats, n_ori, n_cells, n_timepoints))
+    :param zscore_threshold:
+    :param std_threshold:
+    :return: cell_theshold, shape ((n_cells))
+    '''
+    if zscore_threshold:  # compute z score of entire trace, then pick some global threshold (for all cells) of how many std above baseline
+
+        z_scored_response = zscore_baseline(obj, param_matrix) # array of responses, shape ((n_repeats, n_ori, ..., n_cells, timepoints))
+        cell_threshold = np.ones((z_scored_response.shape[-2])) * zscore_threshold
+
+    elif std_threshold: # compute individual (cell-by-cell) threshold
+        # either compute DC offset, or deltaF/
+
+        # DELTA F / F, shape = ((n_repeats, n_ori, n_cells, n_timepoints
+        dFoF_response = deltaf_over_f(obj, param_matrix) # array of responses, shape ((n_repeats, n_ori, ..., n_cells, timepoints))
+
+        # first second of the response (baseline period) > std over orientations, repeats and timepoints > multiply each cell by threshold
+        cell_threshold = dFoF_response[..., :obj.fps].std(axis=(0, 1, -1)) * std_threshold
+
+    return cell_threshold
+
+
+def zscore_thresholding (object, day, recording, zscore_threshold = None, std_threshold = None):
+    '''
+    Determines which cells were responsive
+
+    :param object:
+    :param zscore_threshold: 2
+    :param std_threshold: 1.5
+
+    '''
+
+    # since we're z scoring according to the baseline period, want to grab raw responses so we don't z score twice
+    # shape (n_repeats, n_ori, n_cells, timepoints)
+    parameter_matrix, _ = build_parameter_matrix(object, day, recording, response_window='whole', zscore=False)
+
+    # ZSCORED RESPONSES, shape = ((n_repeats, n_ori, n_cells, n_timepoints
+    z_scored_response = zscore_baseline(object, parameter_matrix)
+
+    # DELTA F / F, shape = ((n_repeats, n_ori, n_cells, n_timepoints
+    dFoF_response = deltaf_over_f (object, parameter_matrix)
+
+    cell_threshold = get_cell_by_cell_threshold(object, parameter_matrix, zscore_threshold=zscore_threshold, std_threshold=std_threshold)
+
+    # shape n_cells > take the z scored responses during the 'moving grating' period > average (n_ori, n_cells, n_timepoints) over orientations/repeats to get shape (n_cells)
+    #z_scored_response_mean = z_scored_response[..., object.fps * 2: object.fps * 5].mean(axis=(0,-1))
+    # shape (n_ori, n_cells)
+    z_scored_response_mean = z_scored_response[..., object.fps * 2: object.fps * 5].mean(axis=(0,-1))
+    z_scored_response_median = np.median(z_scored_response[..., object.fps * 2: object.fps * 5], axis=(0,-1))
+
+    # see if the mean response during moving exceeds the cell std threshold
+    #cell_exceeds_threshold = z_scored_response_mean > cell_threshold
+    # shape (n_ori, n_cells) > (n_cells)
+    # cell_exceeds_threshold = (z_scored_response_mean > cell_threshold[None,:]).any(axis=0) & (
+    #             z_scored_response_median > cell_threshold[None,:] * 0.4).any(axis=0)
+
+    # shape (n_ori, n_cells) > (n_cells)
+    cell_exceeds_threshold = (z_scored_response_mean > cell_threshold[None,:]).any(axis=0)
+
+    return z_scored_response, dFoF_response, cell_exceeds_threshold
+
+
+def responsive_cells(obj):
+
+    responsive_percentage = {}  # {'Control_0': [],'Control_1': [], 'RD1_0':[], 'RD1_1':[]}
+
+    for i_animal, animal in enumerate(obj.dat):
+
+        group = animal.split('_')[1]
+        days_recordings = [(day, subfile) for day in obj.dat[animal].dat_subject for subfile in
+                           obj.dat[animal].dat_subject[day] if 'grat' in subfile]
+
+        for i, (day, subfile) in enumerate(days_recordings):
+            timepoint = calculate_animal_age(obj.animal_dobs[animal], day)
+
+            # shape n_Cells, n_timepoints
+            percent_cells = 100 * obj.dat[animal].dat_subject[day][subfile]['thresholded_cells'].sum() / len(obj.dat[animal].dat_subject[day][subfile]['thresholded_cells'])
+
+            if group in responsive_percentage:
+                if timepoint in responsive_percentage[group]:
+                    responsive_percentage[group][timepoint].append(percent_cells)
+                else:
+                    responsive_percentage[group][timepoint] = [percent_cells]
+            else:
+                responsive_percentage[group] = {}
+                responsive_percentage[group][timepoint] = [percent_cells]
+
+    for group in responsive_percentage:
+        for timepoint in responsive_percentage[group]:
+            responsive_percentage[group][timepoint] = np.array(responsive_percentage[group][timepoint])
+
+    return responsive_percentage
+
+def trial_reliability(response_matrix):
+    """
+    Compute average trial-by-trial reliability (correlation) for each orientation and cell.
+
+    :param response_matrix: array of shape (n_repeats, n_orientations, n_cells, n_timepoints)
+    :return: reliability matrix of shape (n_orientations, n_cells)
+    """
+    n_repeats, n_orientations, n_cells, n_timepoints = response_matrix.shape
+    reliability = np.full((n_orientations, n_cells), np.nan) # array full of nans of shape (n_ori, n_cells)
+
+    for o in range(n_orientations):
+        for c in range(n_cells):
+            trials = response_matrix[:, o, c, :]  # shape (n_repeats, n_timepoints)
+
+            # correlating mean of first half of trials with mean of second half of trials
+            n_repeats = trials.shape[0]
+            half_repeats = n_repeats//2
+            trials_half1, trials_half2 = trials[:half_repeats].mean(axis = 0),  trials[half_repeats:].mean(axis = 0) # each of shape n_timepoints
+            trials = np.vstack((trials_half1, trials_half2))
+            corr_matrix = np.corrcoef(trials)  # shape (n_repeats, n_repeats) > correlate each pair of trials
+
+            # if we are correlating each trial with every other trial
+            #corr_matrix = np.corrcoef(trials)  # shape (n_repeats, n_repeats) > correlate each pair of trials
+            iu = np.triu_indices(trials.shape[0], k=1) # indices of upper triangle of (n_repeats x n_repeats) matrix, exclude self-corr (diagonals)
+            reliability[o, c] = np.nanmean(corr_matrix[iu]) # take mean of upper triangle
+
+    return reliability
+
+
 def complex_phase_from_tuning (tuning_curves, thetas):
     '''
     :param tuning_curves: shape ((n_repeats, n_orientation/n_SF, cells))
@@ -393,14 +550,18 @@ def store_metrics(object, day, recording, response_window = 'whole', zscore = Tr
     _, object.dat_subject[day][recording]['OSI'], object.dat_subject[day][recording]['preferred_orientation'] = orientation
     _, object.dat_subject[day][recording]['DSI'], object.dat_subject[day][recording]['preferred_direction'] = direction
 
+    object.dat_subject[day][recording]['zscored'], object.dat_subject[day][recording]['dFoF'], object.dat_subject[day][recording]['thresholded_cells'] =  zscore_thresholding(object, day, recording, zscore_threshold=object.zscore_threshold, std_threshold=object.std_threshold)
 
-def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days = False):
+
+def corr_vector (obj, animal, thresholded_cells = 0, null_distribution = False, n = 1000, across_days = False):
     '''
     :param obj:
-    :param null_distribution:
-    :param n:
+    :param animal (str):
+    :param thresholded_cells: either 0 (take all cells for the analysis), 1 (cells that pass treshold at least once), 2 (cells that pass threshold on all days)
+    :param null_distribution (bool):
+    :param n (int):
     :param across_days: True if we want to get 1 correlation value across all days(average the matrix). False if we want to compare separate days
-    :return:
+    :return: correlation matrix, shape (n_days, n_days, n_cells)
 
     NB: deconvolved must be true
     '''
@@ -411,16 +572,29 @@ def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days =
     days_recordings = [(day, subfile) for day in dat_object.dat_subject for subfile in dat_object.dat_subject[day] if 'grat' in subfile]
     days = [d[0] for d in days_recordings]
 
+    if thresholded_cells == 0: # take all cells, regardless of whether or not they pass threshold at any point
+        n_cells = dat_object.track2p_obj.track_ops_dict['n_tracked']
+        cell_indices = range(n_cells)
+    elif thresholded_cells == 1: # only take cells that pass threshold on a minimum of 1 day
+        cell_indices = np.where(np.array([obj.dat[animal].dat_subject[day][subfile]['thresholded_cells'] for (day, subfile) in days_recordings]).any(axis = 0))[0]
+        n_cells = len(cell_indices)
+    elif thresholded_cells == 2:
+        cell_indices = np.where(np.array([obj.dat[animal].dat_subject[day][subfile]['thresholded_cells'] for (day, subfile) in days_recordings]).all(axis=0))[0]
+        n_cells = len(cell_indices)
+    else: # default is to just take all cells
+        n_cells = dat_object.track2p_obj.track_ops_dict['n_tracked']
+        cell_indices = range(n_cells)
 
      # if using deconvolved traces, z scoring doesnt make sense (cant have neg values). only use z score if deconvovled = false
-    param_matrix_key = 'param_matrix_whole' if dat_object.deconvolved else 'param_matrix_whole_zscore'
+    #param_matrix_key = 'param_matrix_whole' if dat_object.deconvolved else 'param_matrix_whole_zscore'
+    param_matrix_key = 'zscored'
 
     if across_days:     # 1 correlation value per cell
-        corr_values = np.zeros(dat_object.track2p_obj.track_ops_dict['n_tracked'])
+        corr_values = np.zeros(n_cells)
     else:               # 1 correlation value per day per cell
-        corr_values = np.zeros((len(days), len(days), dat_object.track2p_obj.track_ops_dict['n_tracked']))
+        corr_values = np.zeros((len(days), len(days), n_cells))
 
-    for cell in tqdm(range(dat_object.track2p_obj.track_ops_dict['n_tracked']), desc = 'Calculating correlation distribution for each cell'):
+    for i_cell, cell_num in enumerate(tqdm(cell_indices, desc = 'Calculating correlation distribution for each cell')):
         correlation_matrix = np.zeros((len(days), len(days)))
         for i, day_i in enumerate(days):
             for j, day_j in enumerate(days):
@@ -429,14 +603,14 @@ def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days =
                     if null_distribution:
                         # param_matrix_whole_zscore is : shape (n_repeats, n_orientations, n_cells, n_timepoints)
                         # response vector i > (shape n_orientations) > average response across time
-                        vector_i = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:, cell]
+                        vector_i = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:, cell_num]
 
                         null_dist = np.zeros(n)
                         # for the null distribution: shuffle cells across days (or just pick random cells)
                         for i_n in range(n):
                             # output of interleave_responses is : shape (n_orientations, n_cells, n_timepoints)
                             # response vector j > (shape n_orientations) > average response across time
-                            vector_j = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:, np.random.randint(dat_object.track2p_obj.track_ops_dict['n_tracked'])]
+                            vector_j = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:, np.random.choice(cell_indices)]
 
                             #roll_by = np.random.randint(obj.dat_subject[day_i]['mean_ordered_grat_responses'].shape[-1])
                             #vector_j = obj.dat_subject[day_i]['mean_ordered_grat_responses'][:, cell].mean(axis=-1)
@@ -448,8 +622,8 @@ def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days =
 
                     else:
                         # response vector (shape n_orientations) > average across time (average response)
-                        vector_i = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:,cell]
-                        vector_j = dat_object.dat_subject[day_j]['grat'][param_matrix_key].mean(axis=(0,-1))[:,cell]
+                        vector_i = dat_object.dat_subject[day_i]['grat'][param_matrix_key].mean(axis=(0,-1))[:,cell_num]
+                        vector_j = dat_object.dat_subject[day_j]['grat'][param_matrix_key].mean(axis=(0,-1))[:,cell_num]
 
                         corr_coef, p_value = pearsonr(vector_i, vector_j)
                         correlation_matrix[i, j] = corr_coef
@@ -460,12 +634,12 @@ def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days =
 
                         # Split data into first half and second half along the first axis (repeats/trials)
                         half = param_data.shape[0] // 2
-                        vector_first_half = param_data[:half, :, cell, :].mean(axis=(0, -1))  # (n_orientations,)
+                        vector_first_half = param_data[:half, :, cell_num, :].mean(axis=(0, -1))  # (n_orientations,)
 
                         null_dist = np.zeros(n)
                         # for the null distribution: shuffle cells across days (or just pick random cells)
                         for i_n in range(n):
-                            vector_second_half = param_data[half:, :, np.random.randint(dat_object.track2p_obj.track_ops_dict['n_tracked']), :].mean(axis=(0, -1))  # (n_orientations,)
+                            vector_second_half = param_data[half:, :, np.random.choice(cell_indices), :].mean(axis=(0, -1))  # (n_orientations,)
 
                             # Compute Pearson correlation between halves
                             corr_coef, _ = pearsonr(vector_first_half, vector_second_half)
@@ -478,8 +652,8 @@ def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days =
 
                         # Split data into first half and second half along the first axis (repeats/trials)
                         half = param_data.shape[0] // 2
-                        vector_first_half = param_data[:half, :, cell, :].mean(axis=(0, -1))  # (n_orientations,)
-                        vector_second_half = param_data[half:, :, cell, :].mean(axis=(0, -1))  # (n_orientations,)
+                        vector_first_half = param_data[:half, :, cell_num, :].mean(axis=(0, -1))  # (n_orientations,)
+                        vector_second_half = param_data[half:, :, cell_num, :].mean(axis=(0, -1))  # (n_orientations,)
 
                         # Compute Pearson correlation between halves
                         corr_coef, _ = pearsonr(vector_first_half, vector_second_half)
@@ -489,12 +663,12 @@ def corr_vector (obj, animal, null_distribution = False, n = 1000, across_days =
             # corr_values is of shape n_cells
             # correlation_matrix is of shape (n_days, n_days)
             # want to exclude within-day comparisons
-            corr_values[cell] = correlation_matrix[np.triu_indices(correlation_matrix.shape[0], k=1)].mean()
+            corr_values[i_cell] = correlation_matrix[np.triu_indices(correlation_matrix.shape[0], k=1)].mean()
 
         else:
             # corr_values is of shape (n_days, n_cells)
             # correlation_matrix is of shape (n_days, n_days) > only take 1st row because it compares day 1 with all other days > changed to taking whole array (also want to compare day2 with itself)
-            corr_values[:, :, cell] = np.array(correlation_matrix)
+            corr_values[:, :, i_cell] = np.array(correlation_matrix)
 
     return corr_values
 
@@ -628,10 +802,11 @@ def hist_osi_angle (obj):
     '''
 
     fig, ax = plt.subplots(len(obj.dat_subject.keys()),2, figsize = (6.5,8))
+    print(obj.dat_subject.keys())
     for i, day in enumerate(obj.dat_subject.keys()):
 
-        ax[i,0].hist(obj.dat_subject[day]['pref_orientation'], color =  'r', alpha = 0.5, label = f'Cell count, {day}', bins = np.linspace(-180,180,25))
-        ax[i, 1].hist(obj.dat_subject[day]['OSI'], color =  'b', alpha = 0.5, label = f'Cell count, {day}', bins = np.linspace(0,1,25))
+        ax[i,0].hist(obj.dat_subject[day]['grat']['preferred_orientation'], color =  'r', alpha = 0.5, label = f'Cell count, {day}', bins = np.linspace(-180,180,25))
+        ax[i, 1].hist(obj.dat_subject[day]['grat']['OSI'], color =  'b', alpha = 0.5, label = f'Cell count, {day}', bins = np.linspace(0,1,25))
 
         # ax[i,0].set_ylim([0, 6])
         # ax[i, 0].set_xlim([-100, 100])
@@ -1111,40 +1286,56 @@ def binarize_array(data, threshold=4):
     return (data >= threshold).astype(int)
 
 
-
 def plot_slope_eigenvals(power_law_slopes):
+    fig, ax = plt.subplots(nrows=len(power_law_slopes), ncols=1, figsize=(7, 4*len(power_law_slopes)), sharex = True, sharey=True)
+    colours = {'dark': 'blue', 'ctrl': 'black', 'light': 'red'}
 
-    plt.figure(figsize=(7, 5))
+    if len(power_law_slopes) == 1:
+        ax = [ax]
 
-    colours = {'dark': 'blue', 'control': 'black', 'light': 'red'}
+    for i_group, group in enumerate(power_law_slopes):
+        #print(i_group, group)
+        session_keys = list(power_law_slopes[group].keys())
+        x_pos = np.arange(1, len(session_keys) + 1)
+        session_vals = list(power_law_slopes[group].values())
 
-    group_names = list(power_law_slopes.keys())
+        max_animals = max(len(vals) for vals in session_vals)
+        for i_animal in range(max_animals):
+            y_vals = []
+            x_vals = []
+            for i, vals in enumerate(session_vals):
+                if i_animal < len(vals):
+                    y_vals.append(vals[i_animal])
+                    jitter = np.random.normal(0, 0.05)
+                    x_vals.append(x_pos[i] + jitter)
+            ax[i_group].plot(x_vals, y_vals, marker='o', color='gray', alpha=0.4)
 
-    # Plot scatter points and means
-    for group in group_names:
+        # Plot mean points without jitter
+        means = [np.mean(vals) for vals in session_vals]
+        ax[i_group].plot(x_pos, means, marker='d', markersize=10, color=colours.get(group, 'gray'), label=group)
+        ax[i_group].plot(x_pos, means, color=colours.get(group, 'gray'))
+        ax[i_group].set_xticks(x_pos)
+        ax[i_group].set_xticklabels(session_keys)
+        ax[i_group].set_xlabel('Recording session')
+        ax[i_group].set_ylabel('Power-law slope')
+        ax[i_group].set_title(f'{group} group')
+        ax[i_group].grid(axis='y', linestyle='--', alpha=0.5)
 
-        x_pos =[i+1 for i in range(len(power_law_slopes[group]))]
-        slopes = np.array([np.array(vals) for vals in power_law_slopes[group].values()])
-        x_jittered = [x + np.random.normal(-0.05, 0.05, size=len(y_pair)) for x, y_pair in zip(x_pos, slopes)]
+    # Make sure x-tick labels are visible on all axes
+    for axis in ax:
+        axis.tick_params(labelbottom=True)  # force labels on
 
-        #if plotting each animal an individual colour
-        n_animals = slopes.shape[1]
-        for i_animal in range(n_animals):
-            plt.plot(x_pos, slopes[:, i_animal], marker='o', label=f'animal_{i_animal + 1}', color='grey',alpha=0.4)
+    session_keys = list(power_law_slopes[list(power_law_slopes.keys())[0]].keys())
+    print(session_keys)
+    x_pos = np.arange(1, len(session_keys) + 1)
 
-        # for x_jit, y_pair in zip(x_jittered, slopes):
-        #     plt.scatter(x_jit, y_pair, color=colours.get(group, 'gray'), alpha=0.4)
+    for axis in ax:
+        axis.set_xticks(x_pos)
+        axis.set_xticklabels(session_keys)
 
-        plt.plot([x_pos], [slopes.mean(axis = 1)], marker='d', markersize=10, color=colours.get(group, 'gray'), label=group)
-        plt.plot(x_pos, slopes.mean(axis=1), color=colours.get(group, 'gray'), label=group)
+    plt.tight_layout()
+    plt.show()
 
-        plt.xticks(x_pos, power_law_slopes[group].keys())
-        plt.xlabel('Recording session')
-        plt.ylabel('Power-law slope (eigenspectrum)')
-        plt.title('Slope of the Eigenspectrum (spont. activity)')
-        plt.grid(axis='y', linestyle='--', alpha=0.5)
-        plt.tight_layout()
-        plt.show()
 
 
 def calculate_animal_age(dob, imaging_date):
@@ -1167,7 +1358,38 @@ def calculate_animal_age(dob, imaging_date):
 
     return f"P{age_in_days}"
 
+def calculate_day_animal_age(dob, target_postnatal_day):
+    '''
+    Returns day that the animal born on DOB will be of age target_postnatal_day
+    :param dob: format 'YYYYMMDD'
+    :param target_postnatal_day: INT
+    :return:
+    '''
+    # Convert input strings to date objects
+    dob = datetime.strptime(dob, "%Y%m%d")
+    formatted_dob = dob.strftime("%Y%m%d")
 
+    dob_plus_target = dob + timedelta(days=target_postnatal_day)
+    formatted_date = dob_plus_target.strftime("%Y%m%d")
+
+    print( f"Animal born on {formatted_dob} will be P{target_postnatal_day} on {formatted_date})")
+
+
+def calculate_day_animal_dob(target_postnatal_day, target_recording_day):
+    '''
+    Returns DOB of an animal that we want to be of age target_postnatal_day by target_recording_day
+    :param target_recording_day (str): format 'YYYYMMDD'
+    :param target_postnatal_day (int):
+    :return: None (prints string)
+    '''
+    # Convert input strings to date objects
+    target_recording_day = datetime.strptime(target_recording_day, "%Y%m%d")
+    target_day_minus_age = target_recording_day - timedelta(days=target_postnatal_day)
+    formatted_dob = target_day_minus_age.strftime("%Y%m%d")
+
+    print( f"Animal born on {formatted_dob} will be P{target_postnatal_day} on {target_recording_day})")
+
+calculate_day_animal_dob(91,'20250916') # want animal to be P91 on '2025/09/16'
 
 def variance_explained(var_explained_dict, log=False, timepoints = False):
     """
@@ -1431,6 +1653,42 @@ def coactive_cells_per_frame(coactive_counts_groups, timepoints=False):
     stat, pval = mannwhitneyu(coactive_counts_groups[group1], coactive_counts_groups[group2],alternative='two-sided')
     print(f"Mann-Whitney U test: U = {stat:.3f}, p = {pval:.3e}")
 
+
+def get_earliest_file_time(folder, use_mtime=True):
+    """
+    Return the earliest timestamp (creation or modification) among files inside the folder.
+    If the folder is empty or contains no files, return a large value to sort it last.
+    """
+    timestamps = []
+    for root, _, files in os.walk(folder):
+        for f in files:
+            fpath = os.path.join(root, f)
+            try:
+                time = os.path.getmtime(fpath) if use_mtime else os.path.getctime(fpath)
+                timestamps.append(time)
+            except Exception:
+                pass  # skip problematic files
+    return min(timestamps) if timestamps else float('inf')
+
+
+def get_paths(stim, root_dir_animal):
+    '''
+    :param stim: 'spon' or 'grat'
+    :param root_dir_animal: example, f'I:\dark_drift\data\{animal}'
+    :return:
+
+    Get list of directory paths, up until experiments folder
+    '''
+    # root_dir = f'I:\dark_drift\data\{animal}'
+
+    files = []
+    for dirpath, dirnames, filenames in os.walk(root_dir_animal):
+        if os.path.basename(dirpath) == 'experiments':
+            if stim in dirpath:
+                files.append(dirpath)
+    files.sort(key=lambda f: get_earliest_file_time(f, use_mtime=True))
+
+    return files
 
 def spontaneous_analysis_slope(obj, coactive_epochs=True, chunk_size=3):
     '''

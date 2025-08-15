@@ -3,6 +3,8 @@ from preprocessing import *
 from track2p_preprocessing import *
 from suite2p_preprocessing import *
 from figures import *
+from cellreg_preprocessing import *
+from plot_metrics import *
 
 #do everything with non deconvolved data (f-0.7*fneu)
 
@@ -11,41 +13,85 @@ from figures import *
 # track2p_folder = 'track2p'
 # suite2p_obj = suite2pPreprocessing(animal, path, track2p_folder, ntheta = 8, fps = 20, deconvolved = True)
 
-animals = ['EC_dark_01', 'EC_dark_03', 'EC_dark_05', 'EC_dark_08'] #['EC_dark_01', 'EC_dark_03'] #'EC_dark_05', 'EC_dark_08']
+animals = ['EC_dark_01', 'EC_dark_03', 'EC_dark_05', 'EC_dark_08', 'EC_ctrl_10', 'EC_ctrl_11', 'EC_ctrl_12'] #['EC_dark_01', 'EC_dark_03'] #'EC_dark_05', 'EC_dark_08']
 
 animal_dobs = {'EC_dark_01': '20250331',
                'EC_dark_03': '20250331',
                'EC_dark_05': '20250401',
                'EC_dark_08': '20250401',
+               'EC_dark_14': '20250430',
+               'EC_ctrl_10': '20250429',
+               'EC_ctrl_11': '20250429',
+               'EC_ctrl_12': '20250430',
                }
 
-path = r'I:\dark_drift\data'
+# lets add a condition where we only load X animals when tracking is good and analysis is tracking based
+# vs just loading data from a particular day for each animal, if tracking doesnt matter
+# or loading all data we possibly have for example spontaneous analysis
+
+path = r'E:\dark_drift\data'
 data_object = batchProcessing(animals, animal_dobs, path,
                               stim = 'grat',
-                              tracked_cells = True,
+                              tracked_cells = False,
+                              roi_detection = 'functional',
                               ntheta = 8,
                               fps = 20,
+                              zscore_threshold=0.8,
                               deconvolved = True)
+
 
 animal = 'EC_dark_01'
 if (data_object.tracked_cells) and (data_object.stim == 'grat'):
     for animal in data_object.list_animals:
-        fov_across_days(data_object, brightness = 0.5, contrast = 2.2)
+        #fov_across_days(data_object, brightness = 0.5, contrast = 2.2)
+        data_object.dat[animal].corr_matrix = plot_corr(data_object, animal, thresholded_cells=0, n=1,
+                                                        across_days=False)  # includes within-day shuffle
         plot_response(data_object, animal)
         rasters_across_days(data_object, animal)
         polar_plots_across_days(data_object, animal)
         polar_plots_across_days_rois(data_object, animal)
-        #plot_corr(data_object, animal, n=1000, across_days=False) # includes within-day shuffle
+
+        plot_corr_change(corr)
+
+        plot_response(data_object, animal)
+        # look at cells that are responsive at least once + cell that are responsive all days
         # add activity threshold
 
+
 elif (not data_object.tracked_cells) and (data_object.stim == 'grat'):
-    hist_osi_angle(data_object)  # use deconvolved
-    polar_plots(data_object, animal) #tuning curves of all rois
+    for animal in data_object.list_animals:
+        #hist_osi_angle(data_object.dat[animal])  # use deconvolved
+        #polar_plots(data_object, animal) #tuning curves of all rois
+        responsiveness(data_object, 'P70')
+        responsive_cells_across_days(data_object)
+        trial_by_trial_reliability(data_object, 'P70')
+        plot_avg_response(data_object)
+        plot_avg_response_time(data_object)
+
 
 elif (data_object.stim == 'spon')
     var_explained, slope_eigenvals = spontaneous_analysis_slope(data_object)
     del slope_eigenvals['dark']['P70_s']
+    del slope_eigenvals['ctrl']['P70_s']
     plot_slope_eigenvals(slope_eigenvals)
+
+
+def plot_corr_change(corr_matrix):
+    '''
+    :param corr_matrix: output of plot_corr function
+    :return:
+    '''
+    upper_diag = np.array([np.diag(corr_matrix[..., i], k=1) for i in range(corr_matrix.shape[-1])])
+
+    fig, ax = plt.subplots()
+    for vec in upper_diag:
+        ax.plot(np.arange(upper_diag.shape[-1]), vec, c = 'grey', alpha = 0.6)
+    ax.plot(np.arange(upper_diag.shape[-1]), upper_diag.mean(axis= 0), c='blue')
+    ax.set_xticks(np.arange(upper_diag.shape[-1]))
+    ax.set_xticklabels(['P70×P77', 'P77×P84', 'P84×91'])
+    ax.set_xlabel ('Week comparison')
+    ax.set_ylabel('Pearson Correlation')
+    plt.show()
 
 
 plot_rois_across_days (data_object,animal, 65, n_cells_to_plot = 2, brightness = 0.5, contrast = 1) # just keep reruning this if it doesn't plot

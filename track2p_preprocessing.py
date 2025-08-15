@@ -3,11 +3,12 @@ from imports import *
 
 class track2pPreprocessing:
 
-    def __init__(self, main_path, subject, tracked_cells, track2p_folder_name, single_plane = True):
+    def __init__(self, main_path, subject, tracked_cells, roi_detection, track2p_folder_name, single_plane = True):
 
         self.main_path = main_path
         self.subject = subject
         self.tracked_cells = tracked_cells
+        self.roi_detection = roi_detection
         self.track2p_folder_name = track2p_folder_name
         self.single_plane = single_plane
         self.meanImg = []
@@ -83,14 +84,15 @@ class track2pPreprocessing:
         for (i, ds_path) in enumerate(self.track_ops.all_ds_path):
 
             # look in the G drive instead
-            ds_path = ds_path.replace('E:', 'H:')
+            ds_path = ds_path.replace('I:', 'E:')
+            #print(ds_path)
 
-            ops = np.load(os.path.join(ds_path, 'suite2p', self.plane, 'ops.npy'), allow_pickle=True).item()    #options and intermediate outputs (dictionary)
-            stat = np.load(os.path.join(ds_path, 'suite2p', self.plane, 'stat.npy'), allow_pickle=True)         # list of statistics computed for each cell (ROIs by 1)
-            f = np.load(os.path.join(ds_path, 'suite2p', self.plane, 'F.npy'), allow_pickle=True)               # array of fluorescence traces (ROIs by timepoints)
-            fneu = np.load(os.path.join(ds_path, 'suite2p', self.plane, 'Fneu.npy'), allow_pickle=True)         # array of neuropil fluorescence traces (ROIs by timepoints)
-            spikes = np.load(os.path.join(ds_path, 'suite2p', self.plane, 'spks.npy'), allow_pickle=True)       # array of deconvolved traces (ROIs by timepoints)
-            iscell = np.load(os.path.join(ds_path, 'suite2p', self.plane, 'iscell.npy'), allow_pickle=True)     # specifies whether an ROI is a cell, first column is 0/1, and second column is probability that the ROI is a cell based on the default classifier
+            ops = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'ops.npy'), allow_pickle=True).item()    #options and intermediate outputs (dictionary)
+            stat = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'stat.npy'), allow_pickle=True)         # list of statistics computed for each cell (ROIs by 1)
+            f = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'F.npy'), allow_pickle=True)               # array of fluorescence traces (ROIs by timepoints)
+            fneu = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'Fneu.npy'), allow_pickle=True)         # array of neuropil fluorescence traces (ROIs by timepoints)
+            spikes = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'spks.npy'), allow_pickle=True)       # array of deconvolved traces (ROIs by timepoints)
+            iscell = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'iscell.npy'), allow_pickle=True)     # specifies whether an ROI is a cell, first column is 0/1, and second column is probability that the ROI is a cell based on the default classifier
 
             self.meanImg.append(ops['meanImg'])
 

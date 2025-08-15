@@ -14,16 +14,17 @@ def fov_across_days (obj, brightness = 0.5, contrast = 2.2):
 
     for animal in obj.dat:
 
-        for i_day in range(len(obj.dat[animal].dat_subject.keys())):
+        for i_day, day in enumerate(obj.dat[animal].dat_subject.keys()):
             plt.figure(figsize = (10,5))
             plt.imshow(adjust_image(obj.dat[animal].track2p_obj.meanImg[i_day][10:-10, 30:-30], brightness=brightness, contrast=contrast), cmap = 'gray')
+            plt.title(day)
             plt.axis('off')
 
             folder_path = os.path.join(obj.dat[animal].save_path, 'FOV_across_days', animal)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
-            plt.savefig(os.path.join(folder_path, f'day {i_day}.svg'))
-            plt.savefig(os.path.join(folder_path, f'day {i_day}.png'))
+            plt.savefig(os.path.join(folder_path, f'day {day}.svg'))
+            plt.savefig(os.path.join(folder_path, f'day {day}.png'))
             #plt.show()
             plt.close()
 
@@ -379,12 +380,20 @@ def plot_response(object, animal):
 
     for cell_i in range(object.dat[animal].track2p_obj.track_ops.n_tracked):
 
-        fig, ax = plt.subplots (nrows = n_thetas, ncols = len(days)+1, figsize = (6*len(days),5), sharey = True)
+        fig, ax = plt.subplots (nrows = n_thetas+1, ncols = len(days), figsize = (6*len(days),5), sharey = True)
+
+        # add axis for correlation figure
+        right_ax = fig.add_axes([0.92, 0.3, 0.05, 0.4])  # [left, bottom, width, height] in figure coords
+        upper_diag = np.array([np.diag(object.dat[animal].corr_matrix[..., i], k=1) for i in range(object.dat[animal].corr_matrix.shape[-1])])
+        right_ax.plot(upper_diag[cell_i], marker='o')
+        right_ax.set_title('Corr', fontsize=8)
+        right_ax.tick_params(axis='both', labelsize=6)
+        right_ax.set_ylim(-1, 1)  # optional: set fixed y-axis range for correlation
 
         for i_day, (day, subfile) in enumerate(days_recordings):
 
             thetas = object.dat[animal].dat_subject[day][subfile]['orientations']
-            responses = object.dat[animal].dat_subject[day][subfile]['param_matrix_whole_zscore'][:,:,cell_i, :]
+            responses = object.dat[animal].dat_subject[day][subfile]['zscored'][:,:,cell_i, :]
 
             for i_theta, theta in enumerate(thetas):
 
@@ -395,8 +404,13 @@ def plot_response(object, animal):
                 ax[i_theta, i_day].axvline(object.fps, c = 'black', linestyle = 'dotted', alpha = 0.4)
                 ax[i_theta, i_day].axvline(object.fps*2, c='black', linestyle = 'dashed', alpha = 0.6)
 
-                if i_theta ==0:
-                    ax[i_theta, i_day].set_title(f'{calculate_animal_age(object.animal_dobs[animal], day)}')
+                if i_theta ==0 : # set title if in top row
+
+                    if object.dat[animal].dat_subject[day][subfile]['thresholded_cells'][cell_i]:
+                        ax[i_theta, i_day].set_title(f'{calculate_animal_age(object.animal_dobs[animal], day)}', color='green', fontweight='bold')
+                    else:
+                        ax[i_theta, i_day].set_title(f'{calculate_animal_age(object.animal_dobs[animal], day)}', color='r')
+
                 if i_day == 0:
                     ax[i_theta, i_day].set_ylabel(f'{int(theta)}\u00b0', rotation = 0,  labelpad=20)
                     ax[i_theta, i_day].yaxis.set_label_coords(-0.1, 0.4)  # Adjust the vertical position (0.4 moves it down)
@@ -407,7 +421,10 @@ def plot_response(object, animal):
                 else:
                     ax[i_theta, i_day].set_xticks([])
 
-        plt.suptitle(f'ROI {cell_i}')
+        if np.array([object.dat[animal].dat_subject[day][subfile]['thresholded_cells'][cell_i] for (day, subfile) in days_recordings]).any():
+            plt.suptitle(f'Cell {cell_i}', fontsize=16, color='green', fontweight='bold')
+        else:
+            plt.suptitle(f'Cell {cell_i}', fontsize=16, color='r')
 
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
@@ -417,7 +434,23 @@ def plot_response(object, animal):
         plt.close()
 
 
-def plot_corr (obj, animal, n = 1000, cumulative = False, across_days = False):
+def plot_corr (obj, animal, thresholded_cells = 0, n = 1000, cumulative = False, across_days = False):
+    '''
+    :param obj:
+    :param animal (str):
+    :param thresholded_cells: either
+        - 0 (take all cells for the analysis)
+        - 1 (cells that pass treshold at least once)
+        - 2 (cells that pass threshold on all days)
+        - 3 cells that pass thresholds on both days we are considering
+        - 4 cells that pass threshold on only 1 of the two days we are considering
+    :param null_distribution (bool):
+    :param n (int):
+    :param across_days: True if we want to get 1 correlation value across all days(average the matrix). False if we want to compare separate days
+    :return: correlation matrix, shape (n_days, n_days, n_cells)
+
+    NB: deconvolved must be true
+    '''
     # 0 > within day (0 with 0)
     # 1 > across day (0 with 1)
     # 2 > across day (0 with 2)
@@ -433,7 +466,7 @@ def plot_corr (obj, animal, n = 1000, cumulative = False, across_days = False):
 
         # just plot histogram
         # these are both of shape n_cells
-        vec, vec_null = corr_vector(obj, animal, null_distribution=False, across_days=across_days), corr_vector(obj, animal, null_distribution=True, n=n, across_days=across_days)
+        vec, vec_null = corr_vector(obj, animal,thresholded_cells = thresholded_cells, null_distribution=False, across_days=across_days), corr_vector(obj, animal,thresholded_cells=thresholded_cells, null_distribution=True, n=n, across_days=across_days)
         min_corr = np.min((vec.min(), vec_null.min()))
 
         if not cumulative:
@@ -477,56 +510,69 @@ def plot_corr (obj, animal, n = 1000, cumulative = False, across_days = False):
 
     else: # across days is false
         # each of these arrays is shape (n_days x n_days x n_cells)
-        # [0,0] > within day 0 comparison
-        # [0,1] > day 0 - day 1 comparison
-        # [1,1] > within day 1 comparison
-        # [1,0] > day 1 - day 0 comparison
-        vec_null = corr_vector(obj, animal, n = n, null_distribution=True, across_days = across_days)
-        vec = corr_vector(obj, animal, null_distribution=False, across_days=across_days)
+        # on-diagonal ([0,0], [1,1]...) > within day comparisons (split-half)
+        # off-diagonal ([0,1], [0,2], [1,0]...) > across-week comparison
+        vec_null = corr_vector(obj, animal, thresholded_cells = thresholded_cells, n = n, null_distribution=True, across_days = across_days)
+        vec = corr_vector(obj, animal, thresholded_cells = thresholded_cells, null_distribution=False, across_days=across_days)
+
+        #vec_thesholded = np.zeros_like(vec)
+
+        # vec is of shape ((n_days, n_days, n_cells))
 
         fig, ax = plt.subplots(len(days), len(days), sharey = True, sharex = True, figsize = (10,8))
-
-        # for i in range(len(days)):
-        #     print(f'day {i}')
-        #     stat, p_val = ks_2samp(vec[i], vec_null[i])
-        #     print(f"KS test: D = {stat:.3f}, p = {p_val:.3e}")
 
         for i in range(len(days)):
             for k in range(len(days)):
 
+
+                if thresholded_cells == 0:
+                    vec_thresholded, vec_null_thresholded = vec, vec_null
+                elif thresholded_cells == 3: # take cells that are responsive on both days
+                    thresholded_cells_idx = dat_object[days[i]]['grat']['thresholded_cells'] & dat_object[days[k]]['grat']['thresholded_cells']
+                    vec_thresholded, vec_null_thresholded = vec[..., thresholded_cells_idx], vec_null[..., thresholded_cells_idx]
+                elif thresholded_cells == 4:
+                    # take cells that are responsive on at least one day
+                    thresholded_cells_idx = dat_object[days[i]]['grat']['thresholded_cells'] | dat_object[days[k]]['grat']['thresholded_cells']
+                    vec_thresholded, vec_null_thresholded = vec[..., thresholded_cells_idx], vec_null[..., thresholded_cells_idx]
+
+                #vec_thesholded[i,k] = vec[i, k, thresholded_cells_idx]
+
                 if obj.tracked_cells:
-                    ax[i,k].hist(vec[i, k], color='lightsalmon', alpha=0.8, bins=np.linspace(vec.min(), 1, 10), label='Aligned')
-                    ax[i,k].hist(vec_null[i,k], color='gray', alpha=0.6, bins=np.linspace(vec.min(), 1, 10), label='Shuffled')
+                    ax[i,k].hist(vec_thresholded[i, k], color='lightsalmon', alpha=0.8, bins=np.linspace(vec_thresholded.min(), 1, 10), label='Aligned')
+                    ax[i,k].hist(vec_null_thresholded[i, k], color='gray', alpha=0.6, bins=np.linspace(vec_thresholded.min(), 1, 10), label='Shuffled')
                     ax[i,k].set_xlabel('Pearson (r) correlation')
                     ax[i,k].set_ylabel('Cell count')
                     ax[i,k].set_title(f'{calculate_animal_age(obj.animal_dobs[animal], days[i])} x {calculate_animal_age(obj.animal_dobs[animal], days[k])}')
                 elif i==k: # if not tracking cells over time, only plot the diagonal (within-day corr)
-                    ax[i,k].hist(vec[i, k], color='lightsalmon', alpha=0.8, bins=np.linspace(vec.min(), 1, 10), label='Aligned')
-                    ax[i,k].hist(vec_null[i,k], color='gray', alpha=0.6, bins=np.linspace(vec.min(), 1, 10), label='Shuffled')
+                    ax[i,k].hist(vec_thresholded[i, k], color='lightsalmon', alpha=0.8, bins=np.linspace(vec_thresholded.min(), 1, 10), label='Aligned')
+                    ax[i,k].hist(vec_null_thresholded[i, k], color='gray', alpha=0.6, bins=np.linspace(vec_thresholded.min(), 1, 10), label='Shuffled')
                     ax[i,k].set_xlabel('Pearson (r) correlation')
                     ax[i,k].set_ylabel('Cell count')
                     ax[i,k].set_title(f'{calculate_animal_age(obj.animal_dobs[animal], days[i])} x {calculate_animal_age(obj.animal_dobs[animal], days[k])}')
                 else:
                     ax[i,k].set_axis_off
-        # for i in range(len(days)):
-        #     ax[i-1].hist(vec[i], color='lightsalmon', alpha = 0.8, bins = np.linspace(vec.min(), 1, 10), label = 'Aligned')
-        #
-        # for i in range(len(days)):
-        #     ax[i].set_xlabel('Pearson (r) correlation')
-        #     ax[i].set_ylabel('Cell count')
-        #     ax[i].set_title(f'day 1 - day{i+1}')
-        #     ax[i].hist(vec_null[i], color='gray',alpha = 0.6, bins = np.linspace(vec.min(), 1, 10), label = 'Shuffled')
+
         plt.suptitle(f'Correlation distribution {animal}')
         plt.tight_layout()
         plt.legend()
         plt.show()
 
+    if thresholded_cells==0:
+        t = 'all_cells'
+    elif thresholded_cells==1:
+        t = 'thresholded'
+    elif thresholded_cells==2:
+        t = 'thresholded_all_days'
+    else:
+        t = ''
+
     folder_path = os.path.join(obj.dat[animal].save_path, f'correlation distribution{", tracked_cells"*obj.tracked_cells}', animal)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-    plt.savefig(os.path.join(folder_path, f'corr dist{"across days"*across_days}{", cumulative"*cumulative}{", tracked_cells"*obj.tracked_cells}.svg'))
-    plt.savefig(os.path.join(folder_path, f'corr dist{"across days"*across_days}{", cumulative"*cumulative}{", tracked_cells"*obj.tracked_cells}.png'))
+    plt.savefig(os.path.join(folder_path, f'corr dist{"across days"*across_days}{", cumulative"*cumulative}{", tracked_cells"*obj.tracked_cells} {t}.svg'))
+    plt.savefig(os.path.join(folder_path, f'corr dist{"across days"*across_days}{", cumulative"*cumulative}{", tracked_cells"*obj.tracked_cells} {t}.png'))
 
+    return vec
 
 def hist_osi_angle (obj):
     '''
@@ -607,8 +653,8 @@ def hist_osi_angle (obj):
             folder_path = os.path.join(obj.dat[animal].save_path, 'hist_metrics', animal)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
-            plt.savefig(os.path.join(folder_path, f'{metric}, day {i}.svg'))
-            plt.savefig(os.path.join(folder_path, f'{metric}, day {i}.png'))
+            plt.savefig(os.path.join(folder_path, f'{metric} {animal}.svg'))
+            plt.savefig(os.path.join(folder_path, f'{metric} {animal}.png'))
             plt.show()
 
 

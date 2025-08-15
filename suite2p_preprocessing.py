@@ -2,9 +2,10 @@ from imports import *
 from helpers import *
 #from preprocessing import *
 from track2p_preprocessing import *
+from cellreg_preprocessing import *
 
 class batchProcessing:
-    def __init__(self, list_animals, animal_dobs, path, ntheta = 8, fps = 20,  stim = 'grat', tracked_cells = False, deconvolved = True):
+    def __init__(self, list_animals, animal_dobs, path, ntheta = 8, fps = 20,  stim = 'grat', tracked_cells = False, roi_detection = 'functional', deconvolved = True, zscore_threshold = None, std_threshold = None):
         self.list_animals = list_animals
         self.animal_dobs = animal_dobs
         self.path = path
@@ -12,33 +13,61 @@ class batchProcessing:
         self.fps = fps
         self.stim = stim # either 'grat' or 'spon'
         self.tracked_cells = tracked_cells
+        self.roi_detection = roi_detection
         self.deconvolved = deconvolved
-        self.dat = {animal: suite2pPreprocessing(animal, self.path, os.path.join(self.path, animal, f'track2p-{self.stim}', 'track2p'), ntheta = self.ntheta, fps = self.fps, tracked_cells=self.tracked_cells, deconvolved = self.deconvolved) for animal in self.list_animals}
+        self.zscore_threshold = zscore_threshold
+        self.std_threshold = std_threshold
+        self.dat = {animal: suite2pPreprocessing(animal, self.stim, self.path, os.path.join(self.path, animal, f'track2p-{self.stim}-{self.roi_detection}'), ntheta = self.ntheta, fps = self.fps, tracked_cells=self.tracked_cells, roi_detection = self.roi_detection, deconvolved = self.deconvolved, zscore_threshold = self.zscore_threshold, std_threshold = self.std_threshold) for animal in self.list_animals}
+        #self.analysis()
+
+    # def analysis(self):
+    #
+    #     if self.stim == 'grat':
+    #         for animal in self.list_animals:
+    #
+    #             # take cells that pass treshold at least once > get matrix shape (n_days, n_days, n_cells)
+    #             self.dat_subject['corr_matrix'] = corr_vector(self, animal, thresholded_cells=1, null_distribution=False, across_days=False)
 
 
 class suite2pPreprocessing:
 
-    def __init__ (self, animal, path, track2p_folder, ntheta = 8, fps = 10, tracked_cells = False, deconvolved = False):
+    def __init__ (self, animal, stim, path, track2p_folder, ntheta = 8, fps = 10, tracked_cells = False, roi_detection = 'functional', deconvolved = False, zscore_threshold = None, std_threshold = None):
 
         self.animal = animal
         self.save_path = str(Path(path).parents[0] / 'figures')
         #self.path = os.path.join(path, animal, track2p_folder)
         self.deconvolved = deconvolved              # True = load deconvolved traces (spikes) ; False = load raw fluorescence traces
         self.tracked_cells = tracked_cells
+        self.roi_detection = roi_detection
         self.fps = fps
         self.ntheta = ntheta
-        self.track2p_obj = track2pPreprocessing(path, animal, self.tracked_cells, track2p_folder)  # load track2p folder
-        self.paths = self.track2p_obj.track_ops.all_ds_path               # list of paths to data
+        self.stim = stim
+        self.zscore_threshold = zscore_threshold
+        self.std_threshold = std_threshold
 
-        # look in the G drive, instead of the E drive
-        #self.paths = [p.replace('E:', 'H:') for p in self.paths]
+
+        if self.tracked_cells:
+            self.track2p_obj = track2pPreprocessing(path, animal, self.tracked_cells, self.roi_detection, track2p_folder)  # load track2p folder
+            self.paths = self.track2p_obj.track_ops.all_ds_path               # list of paths to data
+        else:
+            self.paths = get_paths(self.stim, os.path.join(path, animal))
+            print('Datasets used (using all cells for processing): \n')
+            #print("\n".join(self.paths))
+            print("\n".join("\t" + item for item in self.paths))
+
+        # look in the E drive, instead of the G drive
+        self.paths = [p.replace('I:', 'E:') for p in self.paths]
 
         self.days = np.unique([path_str.split('\\')[4] for path_str in self.paths])        # list of days (strings)
         self.dat_subject = {day: {} for day in self.days}    # dictionary of day (key) and empty dictionary (value) pairs
-        self.load_dat(self.track2p_obj)
+
+        if self.tracked_cells:
+            self.load_dat(self.track2p_obj)
+        else:
+            self.load_dat()
         #self.analysis()
 
-    def load_dat(self, track2p_object):
+    def load_dat(self, track2p_object = None):
 
         for i_day, day in enumerate(self.days):
             for recording_path in [p for p in self.paths if day in p]: #self.paths[i_day].split(os.sep)[5]:
@@ -48,9 +77,12 @@ class suite2pPreprocessing:
 
                 # load suite2p information
                 # load both deconvolved and fluorescence traces
-                suite2p_path = os.path.join(recording_path, 'suite2p','plane0')
+                suite2p_path = os.path.join(recording_path, f'suite2p {self.roi_detection}','plane0')
                 responses, iscell, ops, stat = suite2p_files(suite2p_path, response_type='fluorescence')
                 spikes, _, _, _ = suite2p_files(suite2p_path, response_type='deconvolved')
+
+                #shape n_rois, x_dim, y_dim
+                #self.dat_subject[day][recording]['roi_mask'] = create_roi_mask(stat, ops)
 
                 # store suite2p information (all cells)
                 self.dat_subject[day][recording]['meanImg'] = ops['meanImg']
@@ -77,7 +109,7 @@ class suite2pPreprocessing:
                     self.dat_subject[day][recording]['log'] = {}
                     logpath = os.path.join(os.path.dirname(recording_path), 'logfiles')
 
-                    logpath = logpath.replace('E:', 'G:')
+                    #logpath = logpath.replace('E:', 'G:')
 
                     logfile = [file for file in os.listdir(logpath) if file.endswith('_log.txt')][0]
                     path_to_log_file = os.path.join(logpath, logfile)
@@ -104,7 +136,6 @@ class suite2pPreprocessing:
                     get_neuronal_responses_ttls(self, day, recording)
 
                     #build_parameter_matrix(self, day, response_window='whole', zscore=True)
-                    #store_metrics(self, day, response_window='moving', zscore=True)
 
                     store_metrics(self, day, recording, response_window = 'whole', zscore = True)
 
@@ -115,6 +146,11 @@ class suite2pPreprocessing:
 
     def analysis (self):
         get_complex_num(self)
+
+        # if self.stim == 'grat':
+        #     # take cells that pass treshold at least once > get matrix shape (n_days, n_days, n_cells)
+        #     self.dat_subject ['corr_matrix'] = corr_vector(self, self.animal, thresholded_cells=1, null_distribution=False, across_days=False)
+
 
 # animal = 'EC_GCaMP6s_06'
 # path = r'I:\dark_drift_trial\data'
