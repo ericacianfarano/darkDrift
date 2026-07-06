@@ -1,3 +1,19 @@
+from retmap import *
+
+path = r'E:\dark_drift\data'
+for animal in ['EC_EBc_05']:
+    for day in ['20251202']:
+        for subfile in [item for item in os.listdir(os.path.join(path, animal, day)) if
+                        os.path.isdir(os.path.join(path, animal, day, item)) and ('retmap' in item)]:
+            # config_path = fr'E:\retmap\{animal}\{day}\{subfile}\config.txt'
+            path_to_wdf = fr'E:\dark_drift\data\{animal}\{day}\{subfile}\wdf'
+
+            mode = "1"
+            load_maps
+            run_retmap(path_to_wdf, mode, min_area=250, animal_dob='20250902',
+                       animal=animal, day=day, draw_mask=False)
+
+from retmap import *
 
 if __name__ == '__main__':
 
@@ -149,15 +165,16 @@ if __name__ == '__main__':
                          'EC_dark_08': '20250401',
                    }
 
-    path = r'I:\retmap'
-    for animal in animals_days.keys():
-        for day in animals_days[animal]:
+    path = r'E:\dark_drift\data'
+    for animal in ['EC_EBc_05']:
+        for day in ['20251202']:
             for subfile in [item for item in os.listdir(os.path.join(path, animal, day)) if
-                            os.path.isdir(os.path.join(path, animal, day, item)) and (screen in item)]:
-                print(animal, day, subfile)
-                config_path = fr'I:\retmap\{animal}\{day}\{subfile}\config.txt'
+                            os.path.isdir(os.path.join(path, animal, day, item)) and ('retmap' in item)]:
+                config_path = fr'E:\retmap\{animal}\{day}\{subfile}\config.txt'
+                actual_path = fr'E:\dark_drift\data\{animal}\{day}\{subfile}\wdf'
+
                 mode = "2"
-                run_retmap(config_path, mode, min_area=250, animal_dob = animals_birthdate[animal], animal=animal, day=day, draw_mask=False)
+                run_retmap(config_path, actual_path, mode, min_area=250, animal_dob = '20250902', animal=animal, day=day, draw_mask=False)
     plt.close('all')
 
     # Define colors for each group

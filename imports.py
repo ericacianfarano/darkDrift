@@ -1,12 +1,20 @@
 import numpy as np
 import matplotlib
 # matplotlib.use('TkAgg')
-matplotlib.use('Qt5Agg')
+# matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
 import matplotlib.cm as cm
+from scipy.spatial.distance import cdist
+
+import os
+os.environ["QT_API"] = "pyqt5"      # helps qtpy pick PyQt5 if qtpy is present
+import matplotlib
+matplotlib.use("Qt5Agg")
+import matplotlib.pyplot as plt
+
 
 import os
 import os.path
@@ -15,6 +23,9 @@ import random
 from scipy.io import savemat
 from itertools import chain
 from scipy.stats import mannwhitneyu
+from matplotlib.backends.backend_pdf import PdfPages
+from mpl_toolkits.mplot3d import Axes3D  # required for 3D projection
+from matplotlib.cm import get_cmap
 import scipy
 from scipy.io import loadmat
 from scipy.io import savemat
@@ -46,6 +57,10 @@ from skimage import exposure
 from pathlib import Path
 from scipy.stats import ks_2samp
 from scipy.stats import linregress
+from matplotlib.patches import Ellipse
+import matplotlib.colors as mcolors
+from scipy.stats import ks_2samp, ttest_ind
+from scipy.stats import kruskal
 
 
 from sklearn.preprocessing import minmax_scale
@@ -62,4 +77,11 @@ from sklearn.preprocessing import normalize
 
 import re
 from datetime import datetime
+import umap.umap_ as umap
+from scipy.signal import find_peaks, peak_widths
+import tifffile as tiff
+import imageio.v2 as imageio
+import glob
+from scipy.ndimage import uniform_filter1d  # temporal smoothing
+from sbxreader import sbx_memmap
 

@@ -28,7 +28,7 @@ def fov_across_days (obj, brightness = 0.5, contrast = 2.2):
             #plt.show()
             plt.close()
 
-def polar_plots(obj,animal):
+def polar_plots(obj, animal):
     '''
     plot orientation tuning curves as circular polar plots
     :param obj:
@@ -37,57 +37,83 @@ def polar_plots(obj,animal):
 
     days_recordings = [(day, subfile) for day in obj.dat[animal].dat_subject for subfile in obj.dat[animal].dat_subject[day] if 'grat' in subfile]
     days = [d[0] for d in days_recordings]
-    n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
-
-    # variables and dependencies for colour mapping
-    plasma = plt.get_cmap('plasma')
-    cNorm  = colors.Normalize(vmin=0, vmax=n_cells+5)
-    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=plasma)
-    scalarMap.set_array([])
+    #n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
 
     for i_day, day in enumerate(days):
-        for cell in np.arange(n_cells):
 
-            fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(4, 4))
+        tuning_curves = obj.dat[animal].dat_subject[day]['grat']['tuning_curves'] # shape n_repeats, n_ori, n_cells
+        n_cells = tuning_curves.shape[2]
+        nrows = 4
+        ncols = 5
+        n_pages = int(np.ceil(n_cells / (nrows*ncols)))
 
-            rmax = np.array([obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:,cell] / obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:,cell].sum() for day in days]).max()
-            #max = np.array([suite2p_obj.dat_subject[day]['tuning_curves'][cell] for day in days]).max()
+        # variables and dependencies for colour mapping
+        plasma = plt.get_cmap('plasma')
+        cNorm = colors.Normalize(vmin=0, vmax=n_cells + 5)
+        scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=plasma)
+        scalarMap.set_array([])
 
-            # polar plots need to be plotted in radians
-            # subtract the starting angle so all cells's starting preferred angle is at 0 degrees
-            #theta- theta[0]
+        folder_path = os.path.join(obj.dat[animal].save_path, 'polar_plots_all_cells', animal)
 
-            # r = vector of responses for each direction(response vector)
-            r = obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:,cell]
-            r /= r.sum() # normalizing responses so they're between 0 and 1
-            theta = np.deg2rad(obj.dat[animal].dat_subject[day]['grat']['orientations'])
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
 
-            #to join the last point and first point
-            idx = np.arange(r.shape[0] + 1)
-            idx[-1] = 0
+        with PdfPages(os.path.join(folder_path, f'{animal} polar_plots_all_cells ({day}).pdf')) as pdf:
+            for n_page in range(n_pages):
 
-            # plotting
-            ax.plot(theta, r, linewidth = 3.5, color=scalarMap.to_rgba(cell), alpha = 0.6)
-            ax.plot(theta[idx], r[idx], linewidth = 3.5,color=scalarMap.to_rgba(cell), alpha = 0.6)
-            ax.set_thetagrids([0, 90, 180, 270], y=0.1,
-                                    labels=['0', '\u03c0' + '/2', '\u03c0', '3' + '\u03c0' + '/2'],
-                                    fontsize=10)  # labels = ['0', '','\u03c0','']
-            ax.set_rmax(rmax)
-            ax.set_rlabel_position(45) # r is normalized response
-            ax.tick_params(axis='y', labelsize=8)
-            ax.set_rticks([])#set_rticks(np.round(np.linspace(0, rmax, 2),1))
-            ax.grid(True)
-            ax.set_title(f'{calculate_animal_age(obj.animal_dobs[animal], day)}', fontsize = 12)
+                fig, ax = plt.subplots(nrows=nrows, ncols=ncols, subplot_kw={'projection': 'polar'}, figsize=(10, 7))
+                ax = ax.ravel()
 
-            fig.tight_layout(rect=[0, 0.06, 1, 0.80])
-            plt.suptitle(f'ROI #{cell}', fontsize = 13)
-            folder_path = os.path.join(obj.dat[animal].save_path, 'polar_plots_untracked',calculate_animal_age(obj.animal_dobs[animal], day), animal)
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-            plt.savefig(os.path.join(folder_path, f'untracked tuning curve {cell}.svg'))
-            plt.savefig(os.path.join(folder_path, f'untracked tuning curve {cell}.png'))
-            #plt.show()
-            plt.close()
+                cells = np.array([cell for cell in np.arange((n_page + 0) * nrows * ncols, (n_page + 1) * nrows * ncols) if cell < n_cells])
+
+                for i, cell in enumerate(cells):
+
+                    #fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(4, 4))
+
+                    rmax = np.array([tuning_curves.mean(axis = 0)[:,cell] / tuning_curves.mean(axis = 0)[:,cell].sum() for day in days]).max()
+                    #max = np.array([suite2p_obj.dat_subject[day]['tuning_curves'][cell] for day in days]).max()
+
+                    # polar plots need to be plotted in radians
+                    # subtract the starting angle so all cells's starting preferred angle is at 0 degrees
+                    #theta- theta[0]
+
+                    # r = vector of responses for each direction(response vector)
+                    r = tuning_curves.mean(axis = 0)[:,cell]
+                    r /= r.sum() # normalizing responses so they're between 0 and 1
+                    theta = np.deg2rad(obj.dat[animal].dat_subject[day]['grat']['orientations'])
+
+                    #to join the last point and first point
+                    idx = np.arange(r.shape[0] + 1)
+                    idx[-1] = 0
+
+                    # plotting
+                    ax[i].plot(theta, r, linewidth = 3.5, color=scalarMap.to_rgba(cell), alpha = 0.6)
+                    ax[i].plot(theta[idx], r[idx], linewidth = 3.5,color=scalarMap.to_rgba(cell), alpha = 0.6)
+                    ax[i].set_thetagrids([0, 90, 180, 270], y=0.1,
+                                            labels=['0', '\u03c0' + '/2', '\u03c0', '3' + '\u03c0' + '/2'],
+                                            fontsize=10)  # labels = ['0', '','\u03c0','']
+                    #ax[i].set_rmax(rmax)
+                    ax[i].set_rlabel_position(45) # r is normalized response
+                    ax[i].tick_params(axis='y', labelsize=8)
+                    ax[i].set_rticks([])#set_rticks(np.round(np.linspace(0, rmax, 2),1))
+                    ax[i].grid(True)
+                    ax[i].set_title(f'ROI {cell}\nOSI: {np.round(obj.dat[animal].dat_subject[day]["grat"]["OSI"][cell],2)}, DSI: {np.round(obj.dat[animal].dat_subject[day]["grat"]["DSI"][cell],2)}', fontsize = 12)
+
+                    fig.tight_layout(rect=[0, 0.06, 1, 0.80])
+                    #plt.suptitle(f'ROI #{cell}', fontsize = 13)
+                    plt.suptitle(f'{animal}, {calculate_animal_age(obj.animal_dobs[animal], day)}', fontsize=12)
+                    #folder_path = os.path.join(obj.dat[animal].save_path, 'polar_plots_untracked',calculate_animal_age(obj.animal_dobs[animal], day), animal)
+                    # if not os.path.exists(folder_path):
+                    #     os.makedirs(folder_path)
+                    # plt.savefig(os.path.join(folder_path, f'untracked tuning curve {cell}.svg'))
+                    # plt.savefig(os.path.join(folder_path, f'untracked tuning curve {cell}.png'))
+                    # #plt.show()
+                    # plt.close()
+
+                plt.tight_layout()
+                pdf.savefig()
+                plt.close()
+                #plt.savefig(os.path.join(object.save_path, 'rasters', f'rasters#{n_page}-{animal}-{day}-{session}.png'))
 
 def polar_plots_across_days(obj,animal):
     '''
@@ -100,7 +126,12 @@ def polar_plots_across_days(obj,animal):
 
     days_recordings = [(day, subfile) for day in obj.dat[animal].dat_subject for subfile in obj.dat[animal].dat_subject[day] if 'grat' in subfile]
     days = [d[0] for d in days_recordings]
-    n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
+    #n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
+
+    if obj.dat[animal].checked_tracked_cells is not None:
+        n_cells = len(obj.dat[animal].checked_tracked_cells)
+    else:
+        n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
 
     # variables and dependencies for colour mapping
     plasma = plt.get_cmap('plasma')
@@ -113,6 +144,9 @@ def polar_plots_across_days(obj,animal):
         fig, ax = plt.subplots(1, len(days), subplot_kw={'projection': 'polar'}, figsize=(7, 3))
 
         rmax = np.array([obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:,cell] / obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:,cell].sum() for day in days]).max()
+        if np.isnan(rmax):
+            print(f"Skipping cell {cell}: no valid responses for polar plot")
+            continue
         #max = np.array([suite2p_obj.dat_subject[day]['tuning_curves'][cell] for day in days]).max()
         for i_day, day in enumerate(days):
 
@@ -123,7 +157,12 @@ def polar_plots_across_days(obj,animal):
             # r = vector of responses for each direction(response vector)
             r = obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:,cell]
             r /= r.sum() # normalizing responses so they're between 0 and 1
+            r = np.nan_to_num(r, nan=0.0) # convert any nans to 0
             theta = np.deg2rad(obj.dat[animal].dat_subject[day]['grat']['orientations'])
+
+            if r.sum() <= 0:  # no response at any orientation
+                print(f"Skipping cell {cell} on day {day}: no valid responses for polar plot")
+                continue
 
             #to join the last point and first point
             idx = np.arange(r.shape[0] + 1)
@@ -164,7 +203,12 @@ def polar_plots_across_days_rois(obj, animal):
 
     days_recordings = [(day, subfile) for day in obj.dat[animal].dat_subject for subfile in obj.dat[animal].dat_subject[day] if 'grat' in subfile]
     days = [d[0] for d in days_recordings]
-    n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
+
+    if obj.dat[animal].checked_tracked_cells is not None:
+        n_cells = len(obj.dat[animal].checked_tracked_cells)
+    else:
+        n_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
+
 
     # variables and dependencies for colour mapping
     plasma = plt.get_cmap('plasma')
@@ -178,6 +222,9 @@ def polar_plots_across_days_rois(obj, animal):
 
         rmax = np.array([obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:, cell] / obj.dat[animal].dat_subject[day]['grat']['tuning_curves'].mean(axis = 0)[:, cell].sum() for day in days]).max()
         #max = np.array([suite2p_obj.dat_subject[day]['tuning_curves'][cell] for day in days]).max()
+        if np.isnan(rmax):
+            print(f"Skipping cell {cell}: no valid responses for polar plot")
+            continue
         for i_day, day in enumerate(days):
 
             # polar plots need to be plotted in radians
@@ -289,7 +336,14 @@ def plot_rois_across_days (obj, animal, wind_value, n_cells_to_plot = 8, brightn
     data_object = suite2pobj.track2p_obj
 
     # randomly choose n_cells_to_plot cell ROIs to plot across days
-    n_tracked_cells = data_object.t2p_match_mat_allday.shape[0]
+    #n_tracked_cells = data_object.t2p_match_mat_allday.shape[0]
+
+    if obj.dat[animal].checked_tracked_cells is not None:
+        n_tracked_cells = len(obj.dat[animal].checked_tracked_cells)
+    else:
+        n_tracked_cells = obj.dat[animal].track2p_obj.track_ops.n_tracked
+
+
     cells_to_plot = np.random.randint(0, n_tracked_cells, n_cells_to_plot)
 
     fig, ax = plt.subplots(n_cells_to_plot, len(data_object.track_ops.all_ds_path), figsize = (12,8))
@@ -329,7 +383,13 @@ def rasters_across_days(object, animal):
     #ndays x n orientations x n_Cells x n_timepoints
     arr = np.array([object.dat[animal].dat_subject[day]['grat']['param_matrix_whole'].mean(axis = 0) for day in days])
 
-    for i_cell in range(object.dat[animal].track2p_obj.track_ops.n_tracked):
+    if object.dat[animal].checked_tracked_cells is not None:
+        n_cells = len(object.dat[animal].checked_tracked_cells)
+    else:
+        n_cells = object.dat[animal].track2p_obj.track_ops.n_tracked
+
+
+    for i_cell in range(n_cells):
         fig, ax = plt.subplots(nrows=len(days), ncols=1, figsize=(5, 2 * len(days)))
         for i_day, day in enumerate(days):
             orientations = object.dat[animal].dat_subject[day]['grat']['orientations']
@@ -378,17 +438,22 @@ def plot_response(object, animal):
 
     n_thetas = object.ntheta
 
-    for cell_i in range(object.dat[animal].track2p_obj.track_ops.n_tracked):
+    if object.dat[animal].checked_tracked_cells is not None:
+        n_cells = len(object.dat[animal].checked_tracked_cells)
+    else:
+        n_cells = object.dat[animal].track2p_obj.track_ops.n_tracked
+
+    for cell_i in range(n_cells):
 
         fig, ax = plt.subplots (nrows = n_thetas+1, ncols = len(days), figsize = (6*len(days),5), sharey = True)
 
         # add axis for correlation figure
-        right_ax = fig.add_axes([0.92, 0.3, 0.05, 0.4])  # [left, bottom, width, height] in figure coords
-        upper_diag = np.array([np.diag(object.dat[animal].corr_matrix[..., i], k=1) for i in range(object.dat[animal].corr_matrix.shape[-1])])
-        right_ax.plot(upper_diag[cell_i], marker='o')
-        right_ax.set_title('Corr', fontsize=8)
-        right_ax.tick_params(axis='both', labelsize=6)
-        right_ax.set_ylim(-1, 1)  # optional: set fixed y-axis range for correlation
+        # right_ax = fig.add_axes([0.92, 0.3, 0.05, 0.4])  # [left, bottom, width, height] in figure coords
+        # upper_diag = np.array([np.diag(object.dat[animal].corr_matrix[..., i], k=1) for i in range(object.dat[animal].corr_matrix.shape[-1])])
+        # right_ax.plot(upper_diag[cell_i], marker='o')
+        # right_ax.set_title('Corr', fontsize=8)
+        # right_ax.tick_params(axis='both', labelsize=6)
+        # right_ax.set_ylim(-1, 1)  # optional: set fixed y-axis range for correlation
 
         for i_day, (day, subfile) in enumerate(days_recordings):
 
@@ -434,7 +499,7 @@ def plot_response(object, animal):
         plt.close()
 
 
-def plot_corr (obj, animal, thresholded_cells = 0, n = 1000, cumulative = False, across_days = False):
+def plot_corr (obj, animal, thresholded_cells = 0, cumulative = False, across_days = False):
     '''
     :param obj:
     :param animal (str):
@@ -459,6 +524,8 @@ def plot_corr (obj, animal, thresholded_cells = 0, n = 1000, cumulative = False,
 
     dat_object = obj.dat[animal].dat_subject
 
+    n_cells_tracked = obj.dat[animal].track2p_obj.track_ops.n_tracked
+
     days_recordings = [(day, subfile) for day in dat_object for subfile in dat_object[day] if 'grat' in subfile]
     days = [d[0] for d in days_recordings]
 
@@ -466,7 +533,7 @@ def plot_corr (obj, animal, thresholded_cells = 0, n = 1000, cumulative = False,
 
         # just plot histogram
         # these are both of shape n_cells
-        vec, vec_null = corr_vector(obj, animal,thresholded_cells = thresholded_cells, null_distribution=False, across_days=across_days), corr_vector(obj, animal,thresholded_cells=thresholded_cells, null_distribution=True, n=n, across_days=across_days)
+        vec, vec_null = corr_vector(obj, animal,thresholded_cells = thresholded_cells, null_distribution=False, across_days=across_days), corr_vector(obj, animal,thresholded_cells=thresholded_cells, null_distribution=True, n=n_cells_tracked, across_days=across_days)
         min_corr = np.min((vec.min(), vec_null.min()))
 
         if not cumulative:
@@ -512,7 +579,7 @@ def plot_corr (obj, animal, thresholded_cells = 0, n = 1000, cumulative = False,
         # each of these arrays is shape (n_days x n_days x n_cells)
         # on-diagonal ([0,0], [1,1]...) > within day comparisons (split-half)
         # off-diagonal ([0,1], [0,2], [1,0]...) > across-week comparison
-        vec_null = corr_vector(obj, animal, thresholded_cells = thresholded_cells, n = n, null_distribution=True, across_days = across_days)
+        vec_null = corr_vector(obj, animal, thresholded_cells = thresholded_cells, n = n_cells_tracked, null_distribution=True, across_days = across_days)
         vec = corr_vector(obj, animal, thresholded_cells = thresholded_cells, null_distribution=False, across_days=across_days)
 
         #vec_thesholded = np.zeros_like(vec)
@@ -572,7 +639,73 @@ def plot_corr (obj, animal, thresholded_cells = 0, n = 1000, cumulative = False,
     plt.savefig(os.path.join(folder_path, f'corr dist{"across days"*across_days}{", cumulative"*cumulative}{", tracked_cells"*obj.tracked_cells} {t}.svg'))
     plt.savefig(os.path.join(folder_path, f'corr dist{"across days"*across_days}{", cumulative"*cumulative}{", tracked_cells"*obj.tracked_cells} {t}.png'))
 
-    return vec
+    return vec, vec_null
+
+
+def plot_group_corr_matrix(obj, group, grat_trackable_animals, load_matrix = False):
+
+    folder_path = os.path.join(os.path.dirname(obj.path), 'figures', f'correlation distribution')
+
+    if load_matrix:
+        corr_matrix_animals = np.load(os.path.join (folder_path,f'corr dist all animals {group} aligned.npy'))
+        null_corr_matrix_animals = np.load(os.path.join(folder_path, f'corr dist all animals {group} shuffled.npy'))
+
+    else:
+        # # run & store correlation for each animal
+        for animal in [a for a in obj.dat.keys() if ((group + '_') in a) and (a in grat_trackable_animals)]:
+            obj.dat[animal].corr_matrix, obj.dat[animal].null_corr_matrix = plot_corr(obj, animal, thresholded_cells=0, across_days=False)  # includes within-day shuffle
+
+        # for each animal, plot_corr outputs a corr matrix is of shape (n_days, n_days, n_cells)
+        # stack all of the data of all corr matrix to get shape (n_days, n_days, n_total_cells)
+        corr_matrix_animals = np.dstack([obj.dat[animal].corr_matrix for animal in obj.dat.keys() if
+                                          (group + '_' in animal) and (animal in grat_trackable_animals)])
+
+        null_corr_matrix_animals =  np.dstack([obj.dat[animal].null_corr_matrix for animal in obj.dat.keys() if
+                                          (group + '_' in animal) and (animal in grat_trackable_animals)])
+
+    n_cells_tracked = corr_matrix_animals.shape[-1]
+    n_days = corr_matrix_animals.shape[0]
+
+    if 'EB' in group:
+        postnatal_days = ['P70', 'P77', 'P84', 'P91']
+    elif 'LB' in group:
+        postnatal_days = ['P105', 'P112', 'P119', 'P126']
+
+    fig, ax = plt.subplots(n_days, n_days, sharey = True, sharex = True, figsize = (10,8))
+
+    for i in range(n_days):
+        for k in range(n_days):
+
+            if i==k: # if not tracking cells over time, only plot the diagonal (within-day corr)
+                ax[i,k].hist(corr_matrix_animals[i, k], color='lightsalmon', alpha=0.8, bins=np.linspace(corr_matrix_animals.min(), 1, 10), label='Aligned')
+                ax[i,k].hist(null_corr_matrix_animals[i, k], color='gray', alpha=0.6, bins=np.linspace(null_corr_matrix_animals.min(), 1, 10), label='Shuffled')
+                # ax[i,k].set_xlabel('Pearson (r) correlation')
+                # ax[i,k].set_ylabel('Cell count')
+                # ax[i,k].set_title(f'{postnatal_days[i]} x {postnatal_days[k]}')
+            else:
+                ax[i, k].hist(corr_matrix_animals[i, k], color='lightsalmon', alpha=0.8,bins=np.linspace(corr_matrix_animals.min(), 1, 10), label='Aligned')
+                ax[i, k].hist(null_corr_matrix_animals[i, k], color='gray', alpha=0.6, bins=np.linspace(null_corr_matrix_animals.min(), 1, 10), label='Shuffled')
+                # ax[i, k].set_xlabel('Pearson (r) correlation')
+                # ax[i, k].set_ylabel('Cell count')
+
+            ax[i, k].set_xlabel('Pearson (r) correlation')
+            ax[i, k].set_ylabel('Cell count')
+            ax[i,k].set_title(f'{postnatal_days[i]} x {postnatal_days[k]}')
+
+    plt.suptitle(f'Correlation distribution : {group} group, {n_cells_tracked} cells')
+    plt.tight_layout()
+    plt.legend()
+    plt.show()
+
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    plt.savefig(os.path.join(folder_path, f'corr dist all animals {group}.svg'))
+    plt.savefig(os.path.join(folder_path, f'corr dist all animals {group}.png'))
+
+    np.save(os.path.join (folder_path,f'corr dist all animals {group} aligned.npy'), corr_matrix_animals)
+    np.save(os.path.join(folder_path, f'corr dist all animals {group} shuffled.npy'), null_corr_matrix_animals)
+
+    return corr_matrix_animals, null_corr_matrix_animals
 
 def hist_osi_angle (obj):
     '''

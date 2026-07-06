@@ -3,7 +3,7 @@ from imports import *
 
 class track2pPreprocessing:
 
-    def __init__(self, main_path, subject, tracked_cells, roi_detection, track2p_folder_name, single_plane = True):
+    def __init__(self, main_path, subject, tracked_cells, roi_detection, track2p_folder_name, single_plane = True, day = None):
 
         self.main_path = main_path
         self.subject = subject
@@ -12,10 +12,12 @@ class track2pPreprocessing:
         self.track2p_folder_name = track2p_folder_name
         self.single_plane = single_plane
         self.meanImg = []
+        self.day = day
         #self.deconvolved = deconvolved      # whether or not we want to use deconvolved spikes (deconvolved = True) or raw fluorescence (deconvolved = False)
         self.load_track2p_output()
         if self.tracked_cells:
             self.track_cells()
+
 
     def load_track2p_output (self):
         '''
@@ -33,7 +35,10 @@ class track2pPreprocessing:
         '''
 
         # directory containing the 'track2p' output folder
-        t2p_save_path = os.path.join(self.main_path, self.subject)
+        if self.day is None: # if we don't specify a day, we are loading the t2p output for the entire period
+            t2p_save_path = os.path.join(self.main_path, self.subject)
+        else: # if we do specify a day, navigate into that day's folder and take the t2p output on that day
+            t2p_save_path = os.path.join(self.main_path, self.subject, self.day)
 
         # the plane to process
         if self.single_plane:
@@ -85,7 +90,18 @@ class track2pPreprocessing:
 
             # look in the G drive instead
             ds_path = ds_path.replace('I:', 'E:')
-            #print(ds_path)
+
+            # i changed animal names. unless i rerun track2p, it doesnt update in the file
+            old_animal_name = ds_path.split('\\')[3]
+            ds_path = ds_path.replace(old_animal_name,self.subject)
+
+            ds_path = Path(ds_path)
+
+            if not ds_path.exists():
+                if ds_path.drive == 'G:':
+                    ds_path = Path(str(ds_path).replace('G:', 'E:', 1))
+                elif ds_path.drive == 'E:':
+                    ds_path = Path(str(ds_path).replace('E:', 'G:', 1))
 
             ops = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'ops.npy'), allow_pickle=True).item()    #options and intermediate outputs (dictionary)
             stat = np.load(os.path.join(ds_path, f'suite2p {self.roi_detection}', self.plane, 'stat.npy'), allow_pickle=True)         # list of statistics computed for each cell (ROIs by 1)
